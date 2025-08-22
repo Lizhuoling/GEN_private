@@ -1,4 +1,5 @@
 import os
+import pdb
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -9,7 +10,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EqualsSubstitution, LaunchConfiguration, PythonExpression, NotEqualsSubstitution
 from launch_ros.actions import LoadComposableNodes, SetParameter, Node, PushROSNamespace
 from launch_ros.descriptions import ComposableNode, ParameterFile
-from gen_nav2_common.launch import ReplaceString, RewrittenYaml
+from nav2_common.launch import ReplaceString, RewrittenYaml
 
 def generate_launch_description():
     # Get the launch directory
@@ -42,7 +43,6 @@ def generate_launch_description():
         'docking_server',
     ]
 
-
     remappings = [('/tf', 'tf'), ('/tf_static', 'tf_static')]
 
     params_file = ReplaceString(
@@ -50,7 +50,8 @@ def generate_launch_description():
         replacements={'<robot_namespace>': ('/', namespace)},
         condition=IfCondition(use_namespace),
     )
-    param_substitutions = {'autostart': autostart}
+    
+    param_substitutions = {'autostart': autostart, 'yaml_filename': map_yaml_file}
     configured_params = ParameterFile(
         RewrittenYaml(
             source_file=params_file,
@@ -99,7 +100,7 @@ def generate_launch_description():
 
     declare_use_composition_cmd = DeclareLaunchArgument(
         'use_composition',
-        default_value='True',
+        default_value='False',
         description='Whether to use composed bringup',
     )
     
