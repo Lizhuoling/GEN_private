@@ -12,24 +12,26 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     use_sim_time = LaunchConfiguration("use_sim_time", default="True")
+    project_root = get_package_share_directory("gen_base_nav")
+    
     map_dir = LaunchConfiguration(
         "map",
         default=os.path.join(
-            get_package_share_directory("gen_base_nav"), "maps", "carter_warehouse_navigation.yaml"
+            project_root, "maps", "carter_warehouse_navigation.yaml"
         ),
     )
 
     param_dir = LaunchConfiguration(
         "params_file",
         default=os.path.join(
-            get_package_share_directory("gen_base_nav"), "params", "carter_navigation_params.yaml"
+            project_root, "params", "carter_navigation_params.yaml"
         ),
     )
 
 
-    nav2_bringup_launch_dir = os.path.join(get_package_share_directory("nav2_bringup"), "launch")
+    bringup_launch_dir = os.path.join(project_root, "launch")
 
-    rviz_config_dir = os.path.join(get_package_share_directory("gen_base_nav"), "rviz2", "carter_navigation.rviz")
+    rviz_config_dir = os.path.join(get_package_share_directory("gen_base_nav"), "rviz", "carter_navigation.rviz")
     
     return LaunchDescription(
         [
@@ -41,11 +43,11 @@ def generate_launch_description():
                 "use_sim_time", default_value="True", description="Use simulation (Omniverse Isaac Sim) clock if True"
             ),
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(os.path.join(nav2_bringup_launch_dir, "rviz_launch.py")),
+                PythonLaunchDescriptionSource(os.path.join(bringup_launch_dir, "rviz_launch.py")),
                 launch_arguments={"namespace": "", "use_namespace": "False", "rviz_config": rviz_config_dir}.items(),
             ),
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([nav2_bringup_launch_dir, "/bringup_launch.py"]),
+                PythonLaunchDescriptionSource(os.path.join(bringup_launch_dir, "base_bringup.launch.py")),
                 launch_arguments={"map": map_dir, "use_sim_time": use_sim_time, "params_file": param_dir}.items(),
             ),
 

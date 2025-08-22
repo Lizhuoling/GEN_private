@@ -7,7 +7,7 @@ install(DIRECTORY
   launch
   params
   maps
-  rviz2
+  rviz
   DESTINATION share/${PROJECT_NAME})
 
 ament_package()
