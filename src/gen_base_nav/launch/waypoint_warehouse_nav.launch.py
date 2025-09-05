@@ -40,14 +40,12 @@ def generate_launch_description():
     lifecycle_nodes = [
         'map_server', 
         'controller_server',
-        'smoother_server',
         'planner_server',
         'behavior_server',
         'velocity_smoother',
         'collision_monitor',
         'bt_navigator',
         'waypoint_follower',
-        'docking_server',
     ]
 
 
@@ -224,17 +222,6 @@ def generate_launch_description():
                 remappings=remappings + [('cmd_vel', 'cmd_vel_nav')],
             ),
             Node(
-                package='nav2_smoother',
-                executable='smoother_server',
-                name='smoother_server',
-                output='screen',
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings,
-            ),
-            Node(
                 package='nav2_planner',
                 executable='planner_server',
                 name='planner_server',
@@ -294,17 +281,6 @@ def generate_launch_description():
                 package='nav2_collision_monitor',
                 executable='collision_monitor',
                 name='collision_monitor',
-                output='screen',
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
-                remappings=remappings,
-            ),
-            Node(
-                package='opennav_docking',
-                executable='opennav_docking',
-                name='docking_server',
                 output='screen',
                 respawn=use_respawn,
                 respawn_delay=2.0,
@@ -404,13 +380,6 @@ def generate_launch_description():
                         remappings=remappings + [('cmd_vel', 'cmd_vel_nav')],
                     ),
                     ComposableNode(
-                        package='nav2_smoother',
-                        plugin='nav2_smoother::SmootherServer',
-                        name='smoother_server',
-                        parameters=[configured_params],
-                        remappings=remappings,
-                    ),
-                    ComposableNode(
                         package='nav2_planner',
                         plugin='nav2_planner::PlannerServer',
                         name='planner_server',
@@ -450,13 +419,6 @@ def generate_launch_description():
                         package='nav2_collision_monitor',
                         plugin='nav2_collision_monitor::CollisionMonitor',
                         name='collision_monitor',
-                        parameters=[configured_params],
-                        remappings=remappings,
-                    ),
-                    ComposableNode(
-                        package='opennav_docking',
-                        plugin='opennav_docking::DockingServer',
-                        name='docking_server',
                         parameters=[configured_params],
                         remappings=remappings,
                     ),

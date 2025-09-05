@@ -35,7 +35,7 @@ class isaac_warehouse_gt_pose(Node):
             10
         )
         
-        self.gt_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, '/amcl_pose', 10)
+        #self.gt_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, '/amcl_pose', 10)
         
         # publish map->odom TF.
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -57,7 +57,7 @@ class isaac_warehouse_gt_pose(Node):
                 self.tf_broadcaster.sendTransform(map_to_odom)
                 
                 
-                gt_pose_msg = PoseWithCovarianceStamped()
+                '''gt_pose_msg = PoseWithCovarianceStamped()
                 gt_pose_msg.header.stamp = transform.header.stamp
                 gt_pose_msg.header.frame_id = 'map'
                 gt_pose_msg.pose.pose.position.x = transform.transform.translation.x
@@ -68,7 +68,7 @@ class isaac_warehouse_gt_pose(Node):
                 gt_pose_msg.pose.pose.orientation.z = transform.transform.rotation.z
                 gt_pose_msg.pose.pose.orientation.w = transform.transform.rotation.w
                 gt_pose_msg.pose.covariance = [0.0] * 36
-                self.gt_pose_publisher.publish(gt_pose_msg)
+                self.gt_pose_publisher.publish(gt_pose_msg)'''
 
 def main(args=None):
     rclpy.init(args=args)
