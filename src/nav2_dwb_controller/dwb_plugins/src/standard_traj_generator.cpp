@@ -37,6 +37,7 @@
 #include <vector>
 #include <algorithm>
 #include <memory>
+#include <iostream>
 #include "dwb_plugins/xy_theta_iterator.hpp"
 #include "nav_2d_utils/parameters.hpp"
 #include "pluginlib/class_list_macros.hpp"
@@ -123,6 +124,7 @@ std::vector<double> StandardTrajectoryGenerator::getTimeSteps(
   const nav_2d_msgs::msg::Twist2D & cmd_vel)
 {
   std::vector<double> steps;
+
   if (discretize_by_time_) {
     steps.resize(ceil(sim_time_ / time_granularity_));
   } else {  // discretize by distance
@@ -141,6 +143,7 @@ std::vector<double> StandardTrajectoryGenerator::getTimeSteps(
         projected_angular_distance / angular_granularity_));
     steps.resize(num_steps);
   }
+
   if (steps.size() == 0) {
     steps.resize(1);
   }
