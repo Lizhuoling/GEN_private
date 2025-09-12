@@ -6,10 +6,13 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu, PointCloud2, CameraInfo, Image
 from nav_msgs.msg import Path, Odometry
 from tf2_msgs.msg import TFMessage
+
 import pdb
 import time
 import numpy as np
-from utils import transform_angular_velocity, quaternion_to_rotation_matrix, traj_frame_reproject
+import cv2
+
+from utils import transform_angular_velocity, quaternion_to_rotation_matrix, traj_frame_reproject, get_colored_point_cloud, transform_campc2basepc
 
 class TF_Subscriber(Node):
     def __init__(self, TF_list):
@@ -123,7 +126,7 @@ class DataRecorder():
         chassis_imu_data = self.topic_subscriber.get_topic_data('/chassis/imu')
         imu_angular_velocity = chassis_imu_data.angular_velocity
         imu_linear_acceleration = chassis_imu_data.linear_acceleration
-        tf_base2imu = self.tf_subscriber.get_transform('base_link', 'chassis_imu')
+        tf_base2imu = self.tf_subscriber.get_transform(frame_id = 'base_link', child_frame_id = 'chassis_imu')
         assert tf_base2imu.transform.translation.x == 0 and tf_base2imu.transform.translation.y == 0 and tf_base2imu.transform.translation.z == 0, \
             'The base_link and chassis_imu must be aligned in the same position.'
         imu2base_R = quaternion_to_rotation_matrix(tf_base2imu.transform.rotation).T
@@ -145,7 +148,76 @@ class DataRecorder():
         cmd_vel_nav = self.topic_subscriber.get_topic_data('/cmd_vel_nav')
         cmd_linear = np.array([cmd_vel_nav.linear.x, cmd_vel_nav.linear.y, cmd_vel_nav.linear.z])
         cmd_angular = np.array([cmd_vel_nav.angular.x, cmd_vel_nav.angular.y, cmd_vel_nav.angular.z])
-        # Image
+        # Front camera
+        front_cam_rgb = self.rgbmsg_to_cv2(self.topic_subscriber.get_topic_data('/front_stereo_camera/left/image_raw')) # Left shape: (h, w, 3)
+        front_cam_depth = self.depthmsg_to_cv2(self.topic_subscriber.get_topic_data('/front_stereo_camera/left/depth_raw')) # Left shape: (h, w)
+        front_cam_info = self.topic_subscriber.get_topic_data('/front_stereo_camera/left/camera_info')
+        front_cam_intrinsics = front_cam_info.k.reshape(3, 3)
+        # Right camera
+        right_cam_rgb = self.rgbmsg_to_cv2(self.topic_subscriber.get_topic_data('/right_stereo_camera/left/image_raw')) # Left shape: (h, w, 3)
+        right_cam_depth = self.depthmsg_to_cv2(self.topic_subscriber.get_topic_data('/right_stereo_camera/left/depth_raw')) # Left shape: (h, w)
+        right_cam_info = self.topic_subscriber.get_topic_data('/right_stereo_camera/left/camera_info')
+        right_cam_intrinsics = right_cam_info.k.reshape(3, 3)
+        # Left camera
+        left_cam_rgb = self.rgbmsg_to_cv2(self.topic_subscriber.get_topic_data('/left_stereo_camera/left/image_raw')) # Left shape: (h, w, 3)
+        left_cam_depth = self.depthmsg_to_cv2(self.topic_subscriber.get_topic_data('/left_stereo_camera/left/depth_raw')) # Left shape: (h, w)
+        left_cam_info = self.topic_subscriber.get_topic_data('/left_stereo_camera/left/camera_info')
+        left_cam_intrinsics = left_cam_info.k.reshape(3, 3)
+        # Back camera
+        back_cam_rgb = self.rgbmsg_to_cv2(self.topic_subscriber.get_topic_data('/back_stereo_camera/left/image_raw')) # Left shape: (h, w, 3)
+        back_cam_depth = self.depthmsg_to_cv2(self.topic_subscriber.get_topic_data('/back_stereo_camera/left/depth_raw')) # Left shape: (h, w)
+        back_cam_info = self.topic_subscriber.get_topic_data('/back_stereo_camera/left/camera_info')
+        back_cam_intrinsics = back_cam_info.k.reshape(3, 3)
+        
+        # image and depth visualization
+        cv2.imwrite('front_cam_rgb.png', np.array(front_cam_rgb[:, :, ::-1]))
+        import matplotlib.pyplot as plt
+        vis_depth = front_cam_depth.copy()
+        vis_depth[vis_depth > 30] = 30
+        plt.imshow(vis_depth, cmap='Spectral_r')
+        plt.axis('off')
+        plt.savefig('front_cam_depth.png', bbox_inches='tight', pad_inches=0)
+
+        # point cloud visualization
+        front_cam_pc_xyzrgb = get_colored_point_cloud(front_cam_rgb, front_cam_depth, front_cam_intrinsics)
+        fcam2base_tf = self.tf_subscriber.get_transform(frame_id = 'base_link', child_frame_id = 'front_stereo_camera_left_rgb')
+        front_cam_pc_xyzrgb_base = transform_campc2basepc(front_cam_pc_xyzrgb, fcam2base_tf.transform.rotation, fcam2base_tf.transform.translation)
+        right_cam_pc_xyzrgb = get_colored_point_cloud(right_cam_rgb, right_cam_depth, right_cam_intrinsics)
+        rcam2base_tf = self.tf_subscriber.get_transform(frame_id = 'base_link', child_frame_id = 'right_stereo_camera_left_rgb')
+        right_cam_pc_xyzrgb_base = transform_campc2basepc(right_cam_pc_xyzrgb, rcam2base_tf.transform.rotation, rcam2base_tf.transform.translation)
+        left_cam_pc_xyzrgb = get_colored_point_cloud(left_cam_rgb, left_cam_depth, left_cam_intrinsics)
+        lcam2base_tf = self.tf_subscriber.get_transform(frame_id = 'base_link', child_frame_id = 'left_stereo_camera_left_rgb')
+        left_cam_pc_xyzrgb_base = transform_campc2basepc(left_cam_pc_xyzrgb, lcam2base_tf.transform.rotation, lcam2base_tf.transform.translation)
+        back_cam_pc_xyzrgb = get_colored_point_cloud(back_cam_rgb, back_cam_depth, back_cam_intrinsics)
+        bcam2base_tf = self.tf_subscriber.get_transform(frame_id = 'base_link', child_frame_id = 'rear_stereo_camera_left_rgb')
+        back_cam_pc_xyzrgb_base = transform_campc2basepc(back_cam_pc_xyzrgb, bcam2base_tf.transform.rotation, bcam2base_tf.transform.translation)
+        pc_xyzrgb = np.concatenate([front_cam_pc_xyzrgb_base, right_cam_pc_xyzrgb_base, left_cam_pc_xyzrgb_base, back_cam_pc_xyzrgb_base], axis=0)
+        np.save('pc_xyzrgb.npy', pc_xyzrgb)
+        pdb.set_trace()
+        
+    def rgbmsg_to_cv2(self, img_msg):
+        dtype = np.dtype("uint8")
+        dtype = dtype.newbyteorder('>' if img_msg.is_bigendian else '<')
+        img_buf = np.frombuffer(img_msg.data, dtype=dtype)
+        if img_msg.encoding in ['mono8', '8UC1']:
+            img_buf = img_buf.reshape(img_msg.height, img_msg.width)
+        elif img_msg.encoding in ['bgr8', 'rgb8', '8UC3']:
+            img_buf = img_buf.reshape(img_msg.height, img_msg.width, 3)
+        elif img_msg.encoding in ['bgra8', 'rgba8', '8UC4']:
+            img_buf = img_buf.reshape(img_msg.height, img_msg.width, 4)
+        else:
+            raise ValueError(f"Unsupported encoding: {img_msg.encoding}")
+        return img_buf
+    
+    def depthmsg_to_cv2(self, img_msg):
+        dtype = np.dtype("float32")
+        dtype = dtype.newbyteorder('>' if img_msg.is_bigendian else '<')
+        img_buf = np.frombuffer(img_msg.data, dtype=dtype)
+        if img_msg.encoding == '32FC1':
+            img_buf = img_buf.reshape(img_msg.height, img_msg.width)
+        else:
+            raise ValueError(f"Unsupported encoding: {img_msg.encoding}")
+        return img_buf
 
 def main(args=None):
     rclpy.init(args=args)
@@ -173,6 +245,10 @@ def main(args=None):
     
     TF_list = [
         ('base_link', 'chassis_imu'),
+        ('base_link', 'front_stereo_camera_left_rgb'),
+        ('base_link', 'left_stereo_camera_left_rgb'),
+        ('base_link', 'right_stereo_camera_left_rgb'),
+        ('base_link', 'rear_stereo_camera_left_rgb'),
     ]
 
     topic_subscriber = TopicSubscriber(topic_list)

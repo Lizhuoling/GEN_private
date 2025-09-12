@@ -1,5 +1,8 @@
-import numpy as np
 from geometry_msgs.msg import Vector3, Quaternion
+
+import pdb
+import numpy as np
+import cv2
 
 def quaternion_to_rotation_matrix(q):
     x, y, z, w = q.x, q.y, q.z, q.w
@@ -56,3 +59,40 @@ def traj_frame_reproject(P_odom, Q_odom, T_odom2base, Q_odom2base):
     Q_base = quaternion_multiply(Q_inv, Q_odom)
     Q_base = Q_base / np.linalg.norm(Q_base, axis=1, keepdims=True)
     return P_base, Q_base
+
+def get_colored_point_cloud(rgb_image, depth_image, camera_intrinsics, dist_threshold = 100):
+    height, width = depth_image.shape
+    x = np.linspace(0, width - 1, width)
+    y = np.linspace(0, height - 1, height)
+    x, y = np.meshgrid(x, y)
+    x = x.flatten()
+    y = y.flatten()
+    z = depth_image.flatten()
+    valid_mask = np.isfinite(z) & (z > 0) & (z < dist_threshold)
+    z = z[valid_mask]
+    fx, fy = camera_intrinsics[0, 0], camera_intrinsics[1, 1]
+    cx, cy = camera_intrinsics[0, 2], camera_intrinsics[1, 2]
+    x = x[valid_mask]
+    y = y[valid_mask]
+    X = (x - cx) * z / fx
+    Y = (y - cy) * z / fy
+    Z = z
+    pc_xyz = np.stack((X, Y, Z), axis=1).astype(np.float32)
+    pc_rgb = rgb_image.reshape(-1, 3)[valid_mask].astype(np.float32) / 255.0
+    pc_xyzrgb = np.concatenate((pc_xyz, pc_rgb), axis=1)
+    return pc_xyzrgb
+
+def transform_campc2basepc(pc_xyzrgb, R_base2cam, T_base2cam):
+    '''
+    Description:
+        pc_xyzrgb (n, 6) is the point cloud in camera frame, where the first 3 columns are the xyz coordinates and the last 3 columns are the rgb values.
+        R_base2cam and T_base2cam are the transformation from the base_link frame to the camera frame.
+    '''
+    pc_xyz_cam = pc_xyzrgb[:, :3]   # Left shape: (n, 3)  
+    pc_rgb = pc_xyzrgb[:, 3:]   # Left shape: (n, 3)
+    R_base2cam = quaternion_to_rotation_matrix(R_base2cam)  # Left shape: (3, 3)
+    T_base2cam = np.array([T_base2cam.x, T_base2cam.y, T_base2cam.z])   # Left shape: (3,)
+    pc_xyz_base = pc_xyz_cam @ R_base2cam.T + T_base2cam   # Left shape: (n, 3)
+    pc_xyzrgb_base = np.concatenate((pc_xyz_base, pc_rgb), axis=1)   # Left shape: (n, 6)
+    return pc_xyzrgb_base
+    
