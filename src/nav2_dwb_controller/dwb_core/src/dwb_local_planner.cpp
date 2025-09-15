@@ -37,6 +37,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "dwb_core/dwb_local_planner.hpp"
 #include "dwb_core/exceptions.hpp"

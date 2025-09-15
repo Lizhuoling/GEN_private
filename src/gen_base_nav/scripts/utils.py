@@ -60,7 +60,7 @@ def traj_frame_reproject(P_odom, Q_odom, T_odom2base, Q_odom2base):
     Q_base = Q_base / np.linalg.norm(Q_base, axis=1, keepdims=True)
     return P_base, Q_base
 
-def get_colored_point_cloud(rgb_image, depth_image, camera_intrinsics, dist_threshold = 100):
+def get_colored_point_cloud(rgb_image, depth_image, camera_intrinsics, dist_threshold = 30):
     height, width = depth_image.shape
     x = np.linspace(0, width - 1, width)
     y = np.linspace(0, height - 1, height)
@@ -95,4 +95,28 @@ def transform_campc2basepc(pc_xyzrgb, R_base2cam, T_base2cam):
     pc_xyz_base = pc_xyz_cam @ R_base2cam.T + T_base2cam   # Left shape: (n, 3)
     pc_xyzrgb_base = np.concatenate((pc_xyz_base, pc_rgb), axis=1)   # Left shape: (n, 6)
     return pc_xyzrgb_base
+
+def frechet_distance(traj1, traj2):
+    """
+    Description:
+        Calculate the Frechet distance between two trajectories.
+    """
+    n, m = len(traj1), len(traj2)
+    dist_matrix = np.zeros((n, m))
+    for i in range(n):
+        for j in range(m):
+            dist_matrix[i, j] = np.linalg.norm(traj1[i] - traj2[j])
+    dp = np.full((n, m), -1.0)
+    dp[0, 0] = dist_matrix[0, 0]
+    for j in range(1, m):
+        dp[0, j] = max(dp[0, j-1], dist_matrix[0, j])
+    for i in range(1, n):
+        dp[i, 0] = max(dp[i-1, 0], dist_matrix[i, 0])
+    for i in range(1, n):
+        for j in range(1, m):
+            dp[i, j] = max(
+                min(dp[i-1, j], dp[i-1, j-1], dp[i, j-1]),
+                dist_matrix[i, j]
+            )
+    return dp[n-1, m-1]
     

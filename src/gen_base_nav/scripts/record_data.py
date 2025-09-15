@@ -11,8 +11,11 @@ import pdb
 import time
 import numpy as np
 import cv2
+import os
+import random
+import h5py
 
-from utils import transform_angular_velocity, quaternion_to_rotation_matrix, traj_frame_reproject, get_colored_point_cloud, transform_campc2basepc
+from utils import *
 
 class TF_Subscriber(Node):
     def __init__(self, TF_list):
@@ -82,10 +85,23 @@ class TopicSubscriber(Node):
             self.timeout_flag = False
 
 class DataRecorder():
-    def __init__(self, topic_subscriber, tf_subscriber):
+    def __init__(self, topic_subscriber, tf_subscriber, data_save_path, file_id = None, A_init_prob = 1/18, B_init_prob = 0.5, target_ratio = 4.0):
         self.topic_subscriber = topic_subscriber
         self.tf_subscriber = tf_subscriber
+        self.data_save_path = data_save_path
+        if file_id is not None:
+            self.file_id = file_id
+        else:
+            self.file_id = self.get_max_file_id()
+            if self.file_id is None: self.file_id = 0
+        
         self.running = True
+        self.class_A_num = 0
+        self.class_B_num = 0
+        self.A_prob = A_init_prob
+        self.B_prob = B_init_prob
+        self.target_ratio = target_ratio
+        self.alpha = 0.1
 
     def run(self):
         while self.running:
@@ -139,11 +155,13 @@ class DataRecorder():
         chassis_odom = self.topic_subscriber.get_topic_data('/chassis/odom')
         chassis_odom_pos, chassis_odom_quat = chassis_odom.pose.pose.position, chassis_odom.pose.pose.orientation
         base_global_plan_trans, base_global_plan_quat = traj_frame_reproject(odom_global_plan_trans, odom_global_plan_quat, chassis_odom_pos, chassis_odom_quat)
+        base_global_plan = np.concatenate((base_global_plan_trans, base_global_plan_quat), axis = 1)
         # Local path planner plan
         odom_local_plan = self.topic_subscriber.get_topic_data('/local_plan').poses
         odom_local_plan_trans = np.array([(ele.pose.position.x, ele.pose.position.y, ele.pose.position.z) for ele in odom_local_plan])
         odom_local_plan_quat = np.array([(ele.pose.orientation.x, ele.pose.orientation.y, ele.pose.orientation.z, ele.pose.orientation.w) for ele in odom_local_plan])
-        base_global_plan_trans, base_global_plan_quat = traj_frame_reproject(odom_local_plan_trans, odom_local_plan_quat, chassis_odom_pos, chassis_odom_quat)
+        base_local_plan_trans, base_local_plan_quat = traj_frame_reproject(odom_local_plan_trans, odom_local_plan_quat, chassis_odom_pos, chassis_odom_quat)
+        base_local_plan = np.concatenate((base_local_plan_trans, base_local_plan_quat), axis = 1)
         # Local planner velocity command
         cmd_vel_nav = self.topic_subscriber.get_topic_data('/cmd_vel_nav')
         cmd_linear = np.array([cmd_vel_nav.linear.x, cmd_vel_nav.linear.y, cmd_vel_nav.linear.z])
@@ -170,16 +188,16 @@ class DataRecorder():
         back_cam_intrinsics = back_cam_info.k.reshape(3, 3)
         
         # image and depth visualization
-        cv2.imwrite('front_cam_rgb.png', np.array(front_cam_rgb[:, :, ::-1]))
+        '''cv2.imwrite('front_cam_rgb.png', np.array(front_cam_rgb[:, :, ::-1]))
         import matplotlib.pyplot as plt
         vis_depth = front_cam_depth.copy()
         vis_depth[vis_depth > 30] = 30
         plt.imshow(vis_depth, cmap='Spectral_r')
         plt.axis('off')
-        plt.savefig('front_cam_depth.png', bbox_inches='tight', pad_inches=0)
+        plt.savefig('front_cam_depth.png', bbox_inches='tight', pad_inches=0)'''
 
         # point cloud visualization
-        front_cam_pc_xyzrgb = get_colored_point_cloud(front_cam_rgb, front_cam_depth, front_cam_intrinsics)
+        '''front_cam_pc_xyzrgb = get_colored_point_cloud(front_cam_rgb, front_cam_depth, front_cam_intrinsics)
         fcam2base_tf = self.tf_subscriber.get_transform(frame_id = 'base_link', child_frame_id = 'front_stereo_camera_left_rgb')
         front_cam_pc_xyzrgb_base = transform_campc2basepc(front_cam_pc_xyzrgb, fcam2base_tf.transform.rotation, fcam2base_tf.transform.translation)
         right_cam_pc_xyzrgb = get_colored_point_cloud(right_cam_rgb, right_cam_depth, right_cam_intrinsics)
@@ -193,7 +211,80 @@ class DataRecorder():
         back_cam_pc_xyzrgb_base = transform_campc2basepc(back_cam_pc_xyzrgb, bcam2base_tf.transform.rotation, bcam2base_tf.transform.translation)
         pc_xyzrgb = np.concatenate([front_cam_pc_xyzrgb_base, right_cam_pc_xyzrgb_base, left_cam_pc_xyzrgb_base, back_cam_pc_xyzrgb_base], axis=0)
         np.save('pc_xyzrgb.npy', pc_xyzrgb)
-        pdb.set_trace()
+        pdb.set_trace()'''
+        
+        save_flag = False
+        if  cmd_angular[-1] < 0.1:  # class A
+            if random.random() < self.A_prob:
+                save_flag = True
+                self.class_A_num += 1
+        elif cmd_angular[-1] >= 0.1:  # class B
+            if random.random() < self.B_prob:
+                save_flag = True
+                self.class_B_num += 1
+        error = (self.class_A_num / max(1, self.class_B_num) - self.target_ratio) / self.target_ratio
+        error = min(error, 3.0)
+        self.A_prob = self.A_prob * (1 - self.alpha * error)
+        self.A_prob = max(min(self.A_prob, 0.5), 0.01)
+        self.B_prob = self.B_prob * (1 + self.alpha * error)
+        self.B_prob = max(min(self.B_prob, 0.5), 0.2)
+    
+        if save_flag:
+            while True:
+                # Every hdf5 file contains no more than 100 data samples.
+                data_writer = H5Writer(file_path = os.path.join(self.data_save_path, "h5py", f'batch_{self.file_id:05d}.hdf5'))
+                if data_writer.get_data_sample_num() >= 100:
+                    self.file_id += 1
+                    data_writer.close()
+                else:
+                    break
+                
+            if not data_writer.has_group('transforms'):
+                transforms_dict = {}
+                for (frame_id, child_frame_id) in self.tf_subscriber.tf_list: 
+                    tansform_key = f'{frame_id}2{child_frame_id}'
+                    transform = self.tf_subscriber.get_transform(frame_id, child_frame_id)
+                    translation = np.array([transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z])
+                    rotation = np.array([transform.transform.rotation.x, transform.transform.rotation.y, transform.transform.rotation.z, transform.transform.rotation.w])
+                    transforms_dict[tansform_key] = {'translation': translation, 'rotation': rotation}
+                data_writer.recursive_save_dict(dict(transforms = transforms_dict))
+                
+            if not data_writer.has_group('samples'):
+                data_writer.create_data_group(group_name = 'samples', parent_path = '/')
+            sample_id = data_writer.get_data_sample_num()
+            data_dict = {f'sample_{sample_id}': {}}
+            data_dict[f'sample_{sample_id}'] = dict(
+                cur_angular_vel = np.array([base_angular_velocity.x, base_angular_velocity.y, base_angular_velocity.z]),
+                cur_linear_acc = np.array([base_linear_acceleration.x, base_linear_acceleration.y, base_linear_acceleration.z]),
+                global_plan = base_global_plan,
+                local_plan = base_local_plan,
+                target_linear = cmd_linear,
+                target_angular = cmd_angular,
+                front_cam_rgb = front_cam_rgb,
+                front_cam_depth = front_cam_depth,
+                front_cam_intrinsics = front_cam_intrinsics,
+                right_cam_rgb = right_cam_rgb,
+                right_cam_depth = right_cam_depth,
+                right_cam_intrinsics = right_cam_intrinsics,
+                left_cam_rgb = left_cam_rgb,
+                left_cam_depth = left_cam_depth,
+                left_cam_intrinsics = left_cam_intrinsics,
+                back_cam_rgb = back_cam_rgb,
+                back_cam_depth = back_cam_depth,
+                back_cam_intrinsics = back_cam_intrinsics,
+            )
+            data_writer.recursive_save_dict(data_dict, parent_key = '/samples')
+            print(f'Write sample {sample_id} to file {self.file_id}.')
+            
+    def get_max_file_id(self,):
+        file_list = sorted(os.listdir(os.path.join(self.data_save_path, "h5py")))
+        file_list = [ele for ele in file_list if ele.endswith('.hdf5')]
+        max_id = None
+        for file_name in file_list:
+            id = int(file_name.rsplit('.')[0].split('_')[1])
+            if max_id is None or id > max_id:
+                max_id = id 
+        return max_id
         
     def rgbmsg_to_cv2(self, img_msg):
         dtype = np.dtype("uint8")
@@ -218,6 +309,49 @@ class DataRecorder():
         else:
             raise ValueError(f"Unsupported encoding: {img_msg.encoding}")
         return img_buf
+    
+class H5Writer:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.file = h5py.File(self.file_path, 'a')
+        
+    def has_group(self, name, path = '/'):
+        return name in self.file[path].keys()
+    
+    def recursive_save_dict(self, data_dict, parent_key = '/'):
+        for key, value in data_dict.items():
+            if isinstance(value, dict):
+                if key in self.file[parent_key].keys():
+                    raise Exception(f'Key {key} already exists in group {parent_key}')
+                else:
+                    self.file[parent_key].create_group(key)
+                    self.recursive_save_dict(value, parent_key = os.path.join(parent_key, key))
+            elif isinstance(value, np.ndarray):
+                if key in self.file[parent_key].keys():
+                    raise Exception(f'Key {key} already exists in group {parent_key}')
+                else:
+                    self.file[parent_key].create_dataset(key, data=value)
+            else:
+                raise ValueError(f'Unsupported type: {type(value)}')
+            
+    def get_data_sample_num(self,):
+        if 'samples' not in self.file.keys():
+            return 0
+        else:
+            return len(self.file['samples'].keys())
+
+    def create_data_group(self, group_name, parent_path = '/'):
+        self.file[parent_path].create_group(group_name)
+
+    def close(self):
+        self.file.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -250,11 +384,12 @@ def main(args=None):
         ('base_link', 'right_stereo_camera_left_rgb'),
         ('base_link', 'rear_stereo_camera_left_rgb'),
     ]
-
+    
+    data_save_path = '/home/cvte/twilight/data/gen_nav/warehouse'
     topic_subscriber = TopicSubscriber(topic_list)
     tf_subscriber = TF_Subscriber(TF_list)
-    data_recorder = DataRecorder(topic_subscriber, tf_subscriber)
+    data_recorder = DataRecorder(topic_subscriber, tf_subscriber, data_save_path)
     data_recorder.run()
-
+    
 if __name__ == '__main__':
     main()
