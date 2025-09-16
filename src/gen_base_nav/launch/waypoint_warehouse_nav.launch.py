@@ -4,7 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.launch_description_sources import PythonLaunchDescriptionSource, AnyLaunchDescriptionSource
 from launch.substitutions import EqualsSubstitution, LaunchConfiguration, PythonExpression, NotEqualsSubstitution
 from launch_ros.actions import LoadComposableNodes, SetParameter, Node, PushROSNamespace
 from launch_ros.descriptions import ComposableNode, ParameterFile
@@ -464,5 +464,11 @@ def generate_launch_description():
             launch_arguments={"namespace": "", "use_namespace": "False", "rviz_config": rviz_config_dir}.items(),
         ),
     )
+    # Add rosbridge server (Still bug in this node, please run ``ros2 launch rosbridge_server rosbridge_websocket_launch.xml'' to start this node.)
+    '''ld.add_action(
+        IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(os.path.join(get_package_share_directory('rosbridge_server'), 'launch', 'rosbridge_websocket_launch.xml')),
+            launch_arguments={'port': '9090', 'address': '', 'ssl': 'false'}.items())
+    )'''
 
     return ld

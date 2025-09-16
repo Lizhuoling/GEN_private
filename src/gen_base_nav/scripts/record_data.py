@@ -85,10 +85,11 @@ class TopicSubscriber(Node):
             self.timeout_flag = False
 
 class DataRecorder():
-    def __init__(self, topic_subscriber, tf_subscriber, data_save_path, file_id = None, A_init_prob = 1/18, B_init_prob = 0.5, target_ratio = 4.0):
+    def __init__(self, topic_subscriber, tf_subscriber, data_save_path, target_file_num = None, file_id = None, A_init_prob = 1/18, B_init_prob = 0.5, target_ratio = 4.0):
         self.topic_subscriber = topic_subscriber
         self.tf_subscriber = tf_subscriber
         self.data_save_path = data_save_path
+        self.target_file_num = target_file_num
         if file_id is not None:
             self.file_id = file_id
         else:
@@ -108,10 +109,13 @@ class DataRecorder():
             try:
                 if not self.tf_subscriber.ready_flag:
                     rclpy.spin_once(self.tf_subscriber)
-                    continue
                 rclpy.spin_once(self.topic_subscriber)
                 self.topic_subscriber.check_callbacks()
                 self.process()
+                if self.target_file_num is not None and self.file_id >= self.target_file_num:
+                    self.running = False
+                    self.tf_subscriber.get_logger().info('Target file number reached. Shutting down.')
+                    break
             except KeyboardInterrupt:
                 self.running = False
                 self.topic_subscriber.get_logger().info('KeyboardInterrupt caught. Shutting down.')
@@ -225,9 +229,9 @@ class DataRecorder():
         error = (self.class_A_num / max(1, self.class_B_num) - self.target_ratio) / self.target_ratio
         error = min(error, 3.0)
         self.A_prob = self.A_prob * (1 - self.alpha * error)
-        self.A_prob = max(min(self.A_prob, 0.5), 0.01)
+        self.A_prob = max(min(self.A_prob, 0.2), 0.002)
         self.B_prob = self.B_prob * (1 + self.alpha * error)
-        self.B_prob = max(min(self.B_prob, 0.5), 0.2)
+        self.B_prob = max(min(self.B_prob, 0.2), 0.01)
     
         if save_flag:
             while True:
@@ -330,7 +334,7 @@ class H5Writer:
                 if key in self.file[parent_key].keys():
                     raise Exception(f'Key {key} already exists in group {parent_key}')
                 else:
-                    self.file[parent_key].create_dataset(key, data=value)
+                    self.file[parent_key].create_dataset(key, data=value, compression='gzip', compression_opts=4)
             else:
                 raise ValueError(f'Unsupported type: {type(value)}')
             
@@ -388,7 +392,7 @@ def main(args=None):
     data_save_path = '/home/cvte/twilight/data/gen_nav/warehouse'
     topic_subscriber = TopicSubscriber(topic_list)
     tf_subscriber = TF_Subscriber(TF_list)
-    data_recorder = DataRecorder(topic_subscriber, tf_subscriber, data_save_path)
+    data_recorder = DataRecorder(topic_subscriber, tf_subscriber, data_save_path, target_file_num = 10)
     data_recorder.run()
     
 if __name__ == '__main__':
