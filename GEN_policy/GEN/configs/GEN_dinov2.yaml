@@ -1,0 +1,30 @@
+__BASE__: "Base.yaml"
+
+POLICY:
+  POLICY_NAME: "GEN"
+  BACKBONE: "dinov2_s"
+  BACKBONE_PATH: "./pretrain/dinov2_vits14_pretrain.pth"
+  STATE_DIM: 6
+  MIXTURE_GAUSSIAN_NUM: 3
+  ENC_LAYERS: 1
+  DEC_LAYERS: 3
+  CHUNK_SIZE: 1
+  UNCERTAINTY_RANGE: [-10, 10]
+
+TRAIN:
+  NUM_ITERATIONS: 2000
+  LOG_INTERVAL: 100
+  SAVE_CHECKPOINT_INTERVAL: 1000
+  BATCH_SIZE: 16
+  LR: 0.00001
+  LR_BACKBONE: 0.00001
+  DECAY_LR_ITER_STEPS: []
+  DATA_SAMPLE_MODE: 'random'
+  MAX_TOKEN_DROP_RATIO: 0.8
+
+DATA:
+  DATASET_DIR: ['datasets/warehouse']
+  MAIN_MODALITY: 'image'  # 'image' or 'point'
+  CAMERA_NAMES: ['front_cam', 'left_cam', 'back_cam', 'right_cam']
+  IMG_RESIZE_SHAPE: [322, 238]
+  GLOBAL_PLAN_LENGTH: 40

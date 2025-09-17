@@ -1,0 +1,53 @@
+SEED: -1
+NUM_NODES: 1
+IS_EVAL: False
+IS_DEBUG: False
+CKPT_DIR: "./outputs/debug"
+DATASET_DIR: "./data/sim_transfer_cube_scripted"
+
+POLICY:
+  POLICY_NAME: "GEN"
+  BACKBONE: "resnet18"
+  BACKBONE_PATH: "./pretrained/dinov2_vits14_pretrain.pth"
+  HIDDEN_DIM: 512
+  DIM_FEEDFORWARD: 3200
+  STATE_DIM: 3
+  POSITION_EMBEDDING: 'sine'
+  DROPOUT: 0.1
+  NHEADS: 8
+  ENC_LAYERS: 1
+  DEC_LAYERS: 1
+  OUTPUT_MODE: 'absolute'
+  UNCERTAINTY_RANGE: [-10, 10]
+  RANDOM_QUERY: True
+  CHUNK_SIZE: 40
+  
+TRAIN:
+  NUM_ITERATIONS: 100000
+  NUM_WORKERS: 3
+  SAVE_CHECKPOINT_INTERVAL: 50000
+  LOG_INTERVAL: 100
+  DECAY_LR_ITER_STEPS: []
+  LR_WARMUP: False
+  WARMUP_STEPS: 1000
+  OPTIMIZER: 'adamw'
+  LR: 0.00001
+  LR_BACKBONE: 0.00001
+  LR_DECAY: 0.1
+  LR_CLIP: 0.0000001 # minimal learning rate
+  WEIGHT_DECAY: 0.0001
+  BATCH_SIZE: 8
+  DATA_SAMPLE_MODE: 'random'
+
+EVAL:
+  DATA_EVAL_RATIO: 0.0
+
+DATA:
+  DATASET_DIR: ['datasets/warehouse']
+  MAIN_MODALITY: 'image'  # 'image' or 'point'
+  CAMERA_NAMES: ['front_cam', 'left_cam', 'back_cam', 'right_cam']
+  IMG_RESIZE_SHAPE: [640, 480]
+  VOXEL_DOWNSAMPLE_VOXEL_SIZE: 0.01
+  IMG_NORM_MEAN: [0.485, 0.456, 0.406]
+  IMG_NORM_STD: [0.229, 0.224, 0.225]
+  GLOBAL_PLAN_LENGTH: 40
