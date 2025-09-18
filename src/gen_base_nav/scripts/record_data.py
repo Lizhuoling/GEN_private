@@ -152,7 +152,7 @@ class DataRecorder():
         imu2base_R = quaternion_to_rotation_matrix(tf_base2imu.transform.rotation).T
         base_angular_velocity = transform_angular_velocity(imu_angular_velocity, imu2base_R)
         base_linear_acceleration = transform_angular_velocity(imu_linear_acceleration, imu2base_R)
-        # Global planner planner plan
+        # Global planner path plan
         odom_global_plan = self.topic_subscriber.get_topic_data('/transformed_global_plan').poses
         odom_global_plan_trans = np.array([(ele.pose.position.x, ele.pose.position.y, ele.pose.position.z) for ele in odom_global_plan])
         odom_global_plan_quat = np.array([(ele.pose.orientation.x, ele.pose.orientation.y, ele.pose.orientation.z, ele.pose.orientation.w) for ele in odom_global_plan])

@@ -11,8 +11,6 @@ import h5py
 from torch.utils.data import TensorDataset, DataLoader
 from torchvision import transforms
 
-from GEN.utils import comm
-
 class NavImageDataset(torch.utils.data.Dataset):
     def __init__(self, cfg, dataset_dir, ids_map_dict, indices, is_train):
         super().__init__()

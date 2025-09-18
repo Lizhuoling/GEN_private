@@ -106,7 +106,7 @@ def _serialize_to_tensor(data, group):
 
     buffer = pickle.dumps(data)
     if len(buffer) > 1024 ** 3:
-        logger = logging.getLogger("GEN")
+        logger = logging.getLogger(__name__)
         logger.warning(
             "Rank {} trying to all-gather {:.2f} GB of data on device {}".format(
                 get_rank(), len(buffer) / (1024 ** 3), device

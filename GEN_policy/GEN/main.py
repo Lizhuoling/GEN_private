@@ -23,6 +23,7 @@ from utils.metric_logger import MetricLogger
 from utils.logger import setup_logger
 from configs.utils import load_yaml_with_base
 from utils.model_zoo import make_policy, load_policy
+from utils.inference.isaac_navigation import IsaacNavEnviManager
 
 def main(args):
     # Initialize logger
@@ -54,42 +55,22 @@ def main(args):
             ckpt_paths = [os.path.join(cfg['CKPT_DIR'], 'policy_latest.ckpt')]
         results = []
         for ckpt_path in ckpt_paths:
-            success_rate, avg_return = eval_bc(cfg, ckpt_path)
-            results.append([ckpt_path.split('/')[-1], success_rate, avg_return])
-
-        for ckpt_name, success_rate, avg_return in results:
-            print(f'{ckpt_name}: {success_rate=} {avg_return=}')
+            eval_bc(cfg, ckpt_path)
+        logger.info("Evaluation completed!")
         exit()
     
     train_dataloader, val_dataloader = load_data(cfg)
     
     train_bc(train_dataloader, val_dataloader, cfg, load_dir = args.load_dir, load_pretrain = args.load_pretrain)
 
-def eval_bc(cfg, ckpt_path):
+def eval_bc(cfg, ckpt_path): 
     ckpt_dir = cfg['CKPT_DIR']
     ckpt_name = ckpt_path.split('/')[-1]
     policy_class = cfg['POLICY']['POLICY_NAME']
-
+    
     policy = load_policy(ckpt_path, policy_class, cfg)
-    raise NotImplementedError
-
-    reward_info = envi_manager.inference()
-
-    if reward_info != None:
-        success_rate = reward_info['success_rate']
-        avg_return = reward_info['average_reward']
-        summary_str = f'\nSuccess rate: {success_rate}\nAverage return: {avg_return}\n\n'
-
-        print(summary_str)
-
-        # save success rate to txt
-        result_file_name = 'result_' + ckpt_name.split('.')[0] + '.txt'
-        with open(os.path.join(ckpt_dir, result_file_name), 'w') as f:
-            f.write(summary_str)
-
-        return success_rate, avg_return
-    else:
-        return 0.0, 0.0
+    envi_manager = IsaacNavEnviManager(cfg, policy)
+    envi_manager.inference()
 
 def forward_pass(data, policy, cfg, iter_cnt):
     if cfg['DATA']['MAIN_MODALITY'] == 'image':

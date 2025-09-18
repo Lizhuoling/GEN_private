@@ -39,7 +39,7 @@ def launch(main_func, args):
                 backend="NCCL", init_method=dist_url, world_size=int(os.environ['WORLD_SIZE']), rank=int(os.environ['RANK'])
             )
         except Exception as e:
-            logger = logging.getLogger("GEN")
+            logger = logging.getLogger(__name__)
             logger.error("Process group URL: {}".format(args.dist_url))
             raise e
         

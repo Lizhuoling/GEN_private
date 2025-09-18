@@ -41,7 +41,7 @@ class GEN_model(nn.Module):
         self.cur_status_proj = nn.Linear(6, hidden_dim)
         self.cur_status_embed = nn.Embedding(1, hidden_dim)
         self.global_plan_proj = nn.Linear(7, hidden_dim)
-        self.global_plan_embed = nn.Embedding(1, hidden_dim)
+        self.global_plan_embed = nn.Embedding(self.cfg['DATA']['GLOBAL_PLAN_LENGTH'], hidden_dim)
         
         self.obs_embed = nn.Embedding(1, hidden_dim) 
         self.query_embed = nn.Embedding(chunk_size, hidden_dim)
@@ -78,8 +78,8 @@ class GEN_model(nn.Module):
         mask = torch.cat([mask, torch.zeros((bs, 1), dtype=bool, device=mask.device)], dim=1)   # Left shape: (B, L+1)
         
         global_plan_src = self.global_plan_proj(padded_global_plan).permute(1, 0, 2)   # Left shape: (max_plan_len, B, C)
-        global_plan_embed = self.global_plan_embed.weight   # Left shape: (1, C)
-        global_plan_embed = global_plan_embed[None].expand(global_plan_src.shape[0], bs, -1)   # Left shape: (max_plan_len, B, C)
+        global_plan_embed = self.global_plan_embed.weight   # Left shape: (max_plan_len, C)
+        global_plan_embed = global_plan_embed[:, None].expand(-1, bs, -1)   # Left shape: (max_plan_len, B, C)
         src = torch.cat([src, global_plan_src], dim=0)   # Left shape: (L+1+max_plan_len, B, C)
         pos = torch.cat([pos, global_plan_embed], dim=0)   # Left shape: (L+1+max_plan_len, B, C)
         mask = torch.cat([mask, padded_global_plan_mask], dim=1)   # Left shape: (B, L+1+max_plan_len)
@@ -116,7 +116,7 @@ def build_encoder(cfg):
     dropout = cfg['POLICY']['DROPOUT'] # 0.1
     nhead = cfg['POLICY']['NHEADS'] # 8
     dim_feedforward = cfg['POLICY']['DIM_FEEDFORWARD'] # 2048
-    num_encoder_layers = cfg['POLICY']['ENC_LAYERS'] # 4 # TODO shared with VAE decoder
+    num_encoder_layers = cfg['POLICY']['ENC_LAYERS']
     normalize_before = False # False
     activation = "relu"
 
