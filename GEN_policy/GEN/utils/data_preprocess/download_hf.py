@@ -24,7 +24,6 @@ def list_repository_files(repo_id: str, repo_type:str, token: str):
 
 
 # HF token（自己填充）
-#HF_TOKEN = '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'
 HF_TOKEN = None
 
 # HF仓库
