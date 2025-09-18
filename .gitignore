@@ -1,6 +1,9 @@
 build
 install
 log
+datasets
+output
+pretrain
 
 *.o
 *.a
