@@ -4,6 +4,7 @@ log
 datasets
 output
 pretrain
+.vscode
 
 *.o
 *.a
