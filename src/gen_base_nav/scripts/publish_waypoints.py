@@ -125,4 +125,4 @@ if __name__ == '__main__':
         (-5.4, -4.3),
         (-5.6, -1.3),
     ]
-    main(xy_waypoints, total_loops=1)
+    main(xy_waypoints, total_loops = 1)

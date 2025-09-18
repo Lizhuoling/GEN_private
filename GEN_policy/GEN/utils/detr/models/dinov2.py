@@ -414,7 +414,6 @@ class DINOv2_Backbone(nn.Module):
         img_resize_w, img_resize_h = cfg['DATA']['IMG_RESIZE_SHAPE']
         self.resize_op = torchvision.transforms.Resize((img_resize_h, img_resize_w), antialias=True)
         self.norm_op = torchvision.transforms.Normalize(mean = cfg['DATA']['IMG_NORM_MEAN'], std = cfg['DATA']['IMG_NORM_STD'])
-        # TODO: Make sure self.grid_mask.training is False when using this in eval mode!
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         
     def forward(self, img_obs):

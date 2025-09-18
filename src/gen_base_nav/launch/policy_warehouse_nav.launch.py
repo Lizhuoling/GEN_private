@@ -275,7 +275,7 @@ def generate_launch_description():
                 parameters=[configured_params],
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=remappings
-                + [('cmd_vel', 'cmd_vel_nav')],
+                + [('cmd_vel', 'cmd_vel_policy')],
             ),
             Node(
                 package='nav2_collision_monitor',
@@ -413,7 +413,7 @@ def generate_launch_description():
                         name='velocity_smoother',
                         parameters=[configured_params],
                         remappings=remappings
-                        + [('cmd_vel', 'cmd_vel_nav')],
+                        + [('cmd_vel', 'cmd_vel_policy')],
                     ),
                     ComposableNode(
                         package='nav2_collision_monitor',
