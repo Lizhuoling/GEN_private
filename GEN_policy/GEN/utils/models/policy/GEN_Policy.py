@@ -13,10 +13,12 @@ class GEN_Policy(nn.Module):
         self.cfg = cfg
         model = get_GEN_model(cfg)
         self.model = model.cuda()
+        
+        self.l1_loss_weight = 5.0
 
-    def __call__(self, ctrl_cmd, cur_status, padded_global_plan, padded_global_plan_mask, envi_obs):
+    def __call__(self, ctrl_cmd, padded_global_plan, padded_global_plan_mask, envi_obs):
         if ctrl_cmd is not None: # training or validation time
-            means, variances, mixture_weights = self.model(cur_status, padded_global_plan, padded_global_plan_mask, envi_obs, is_train = True)
+            means, variances, mixture_weights = self.model(padded_global_plan, padded_global_plan_mask, envi_obs, is_train = True)
             loss_dict = dict()
             
             # means shape: (num_dec, B, chunk_size, num_mixture, state_dim)
@@ -25,21 +27,32 @@ class GEN_Policy(nn.Module):
             # ctrl_cmd shape: (B, state_dim)
             diff = ctrl_cmd[None, :, None, None, :] - means # Left shape: (num_dec, B, chunk_size, num_mixture, state_dim)
             precisions = 1.0 / (variances + 1e-8) # Left shape: (num_dec, B, chunk_size, num_mixture, state_dim)
-            exp_term = -0.5 * (diff**2) * precisions    # Left shape: (num_dec, B, chunk_size, num_mixture, state_dim)
-            norm_term = 0.5 * (torch.log(precisions + 1e-8) - math.log(2 * torch.pi)).sum(dim=-1)   # Left shape: (num_dec, B, chunk_size, num_mixture)
+            #exp_term = -0.5 * (diff**2) * precisions    # Left shape: (num_dec, B, chunk_size, num_mixture, state_dim)
+            exp_term = - self.l1_loss_weight * torch.abs(diff) * precisions  # Use L1 loss to approximate Gaussian.
+            #norm_term = 0.5 * (torch.log(precisions + 1e-8) - math.log(2 * torch.pi)).sum(dim=-1)   # Left shape: (num_dec, B, chunk_size, num_mixture)
+            norm_term = torch.log(precisions + 1e-8).sum(dim=-1)   # Left shape: (num_dec, B, chunk_size, num_mixture)
             log_probs = exp_term.sum(dim=-1) + norm_term  # Left shape: (num_dec, B, chunk_size, num_mixture)
             weighted_log_probs = log_probs + torch.log(mixture_weights + 1e-8)  # Left shape: (num_dec, B, chunk_size, num_mixture)
             log_likelihood = torch.logsumexp(weighted_log_probs, dim=-1)    # Left shape: (num_dec, B, chunk_size)
             likehood_loss = -log_likelihood.sum(-1) # Left shape: (num_dec, B)
             avg_likehood_loss = likehood_loss.mean(dim = -1)    # Left shape: (num_dec,)
             total_loss = avg_likehood_loss.sum()
-
             for dec_id in range(avg_likehood_loss.shape[0]):
                 loss_dict[f'dec_{dec_id}'] = avg_likehood_loss[dec_id].item()
             loss_dict['total_loss'] = total_loss.item()
+            
+            # Real loss items for recording
+            last_dec_diff = torch.abs(diff[-1, :, 0]).detach() # Left shape: (B, num_mixture, state_dim)
+            pos_diff = last_dec_diff[:, :, :1].sum(-1)  # Left shape: (B, num_mixture)
+            ori_diff = last_dec_diff[:, :, 1:].sum(-1)  # Left shape: (B, num_mixture)
+            _, k_indices = torch.max(mixture_weights[-1, :, 0], dim=-1)   # k_indices shape: (B,)
+            pos_real_loss = torch.gather(pos_diff, 1, k_indices.unsqueeze(1)).mean()
+            ori_real_loss = torch.gather(ori_diff, 1, k_indices.unsqueeze(1)).mean()
+            loss_dict['pos_real_loss'] = pos_real_loss.item()
+            loss_dict['ori_real_loss'] = ori_real_loss.item()
             return total_loss, loss_dict
         else: # inference time
-            means, variances, mixture_weights = self.model(cur_status, padded_global_plan, padded_global_plan_mask, envi_obs, is_train = False)
+            means, variances, mixture_weights = self.model(padded_global_plan, padded_global_plan_mask, envi_obs, is_train = False)
             _, k_indices = torch.max(mixture_weights, dim=-1)  # k_indices shape: (B, chunk_size)
             B, chunk_size, num_mixture, action_dim = means.shape
             indices = k_indices[:, :, None, None].expand(-1, -1, 1, action_dim)   # Left shape: (B, chunk_size, 1, action_dim)

@@ -9,3 +9,4 @@ export CXX_INCLUDE_PATH="/usr/lib/python3/dist-packages/numpy/core/include:$CXX_
 # Source the original setup.sh
 source install/setup.sh
 
+# ros2 launch rosbridge_server rosbridge_websocket_launch.xml

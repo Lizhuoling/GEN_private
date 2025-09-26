@@ -139,23 +139,16 @@ class IsaacNavEnviManager():
                     policy_input_array = self.get_policy_input(msg_dict)
                     policy_input = self.transform_policy_input(policy_input_array)
                 
-                action = self.policy(None, policy_input['cur_status'], policy_input['padded_global_plan'], policy_input['padded_global_plan_mask'], policy_input['envi_obs'])
-                action = action[0, 0].cpu().numpy().tolist()  # Left shape: (6)
+                action = self.policy(None, policy_input['padded_global_plan'], policy_input['padded_global_plan_mask'], policy_input['envi_obs'])
+                action = action[0, 0].cpu().numpy().tolist()  # Left shape: (2)
                 vel_cmd = {
-                    'linear':  {'x': action[0], 'y': action[1], 'z': action[2]},
-                    'angular': {'x': action[3], 'y': action[4], 'z': action[5]}
+                    'linear':  {'x': action[0], 'y': 0.0, 'z': 0.0},
+                    'angular': {'x': 0.0, 'y': 0.0, 'z': action[1]}
                 }
                 self.topic_subscriber.action_publisher.publish(vel_cmd)
                 self.logger.info(f'An action published: {vel_cmd}.')
                 
     def get_policy_input(self, msg_dict):
-        # imu and base_link are the same frame.
-        imu_angular_velocity = msg_dict['/chassis/imu']['angular_velocity']
-        imu_angular_velocity = np.array([imu_angular_velocity['x'], imu_angular_velocity['y'], imu_angular_velocity['z']])
-        imu_linear_acceleration = msg_dict['/chassis/imu']['linear_acceleration']
-        imu_linear_acceleration = np.array([imu_linear_acceleration['x'], imu_linear_acceleration['y'], imu_linear_acceleration['z']])
-        cur_status = np.concatenate((imu_angular_velocity, imu_linear_acceleration), axis=0)    # numpy array of shape (6,)
-        
         odom_global_plan_trans, odom_global_plan_quat = self.convert_global_plan_to_array(msg_dict['/transformed_global_plan'])
         chassis_odom_pos = msg_dict['/chassis/odom']['pose']['pose']['position']
         chassis_odom_pos = np.array([chassis_odom_pos['x'], chassis_odom_pos['y'], chassis_odom_pos['z']])
@@ -170,7 +163,6 @@ class IsaacNavEnviManager():
         right_img = self.image_to_numpy(msg_dict['/right_stereo_camera/left/image_raw'])
         
         return dict(
-            cur_status=cur_status,
             global_plan=global_plan,
             front_cam_rgb=front_img,
             left_cam_rgb=left_img,
@@ -179,8 +171,6 @@ class IsaacNavEnviManager():
         )
         
     def transform_policy_input(self, policy_input):
-        cur_status = policy_input['cur_status']
-        
         global_plan = policy_input['global_plan']
         padded_global_plan_mask = np.zeros((self.cfg['DATA']['GLOBAL_PLAN_LENGTH'],), dtype=np.bool)    # Left shape: (GLOBAL_PLAN_LENGTH,)
         if global_plan.shape[0] > self.cfg['DATA']['GLOBAL_PLAN_LENGTH']:
@@ -193,18 +183,19 @@ class IsaacNavEnviManager():
         image_list = []
         for camera_name in self.cfg['DATA']['CAMERA_NAMES']:
             image_list.append(policy_input[f'{camera_name}_rgb'][:].astype(np.float32))  # Left shape: (H, W, 3)
-        image_array = np.stack(image_list, axis=0)  # Left shape: (N, H, W, 3)
-        
-        cur_status = torch.from_numpy(cur_status)[None].float()   # left shape: (1, 6)
+        if len(image_list) > 0:
+            image_array = np.stack(image_list, axis=0)  # Left shape: (N, H, W, 3)
+        else:
+            image_array = np.zeros((0, 0, 0, 3), dtype=np.float32)  # Left shape: (1, 1, 1, 3)
+
         padded_global_plan = torch.from_numpy(padded_global_plan).float()[None]   # left shape: (GLOBAL_PLAN_LENGTH, 7)
         padded_global_plan_mask = torch.from_numpy(padded_global_plan_mask).bool()[None]    # left shape: (GLOBAL_PLAN_LENGTH,)
         image_array = torch.from_numpy(image_array).float()[None]    # Left shape: (1, N, H, W, 3)
         
-        cur_status, padded_global_plan, padded_global_plan_mask, envi_obs = cur_status.cuda(), padded_global_plan.cuda(), padded_global_plan_mask.cuda(), image_array.cuda()
+        padded_global_plan, padded_global_plan_mask, envi_obs = padded_global_plan.cuda(), padded_global_plan_mask.cuda(), image_array.cuda()
         envi_obs = envi_obs.permute(0, 1, 4, 2, 3)
         
         return dict(
-            cur_status=cur_status,
             padded_global_plan=padded_global_plan,
             padded_global_plan_mask=padded_global_plan_mask,
             envi_obs=envi_obs,

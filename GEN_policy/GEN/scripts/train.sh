@@ -1,5 +1,5 @@
-exp_id=GEN_dinov2
-config_name=GEN_dinov2
+exp_id=GEN_dinov2_noimg
+config_name=GEN_dinov2_noimg
 
 nnodes=1
 nproc_per_node=1
@@ -12,6 +12,6 @@ CUDA_VISIBLE_DEVICES=1 torchrun --nnodes=$nnodes --nproc_per_node=$nproc_per_nod
     --config_name $config_name \
     --save_dir ./output/$exp_id \
     --num_nodes $nnodes \
-    #--debug \
+    --debug \
     #--load_dir outputs/isaac_move_basic_pickput_memory/policy_latest.ckpt \
     #--load_pretrain pretrained/VIRT_droid_pretrain.ckpt \

@@ -22,5 +22,5 @@ def visualize_pointcloud(pcd):
     vis.destroy_window()
 
 if __name__ == "__main__":
-    colored_pcd = load_colored_pointcloud(npy_path = '/home/cvte/twilight/code/GEN_private/pc_xyzrgb.npy')
+    colored_pcd = load_colored_pointcloud(npy_path = '/home/cvte/twilight/code/GEN_private/src/gen_base_nav/pc_xyzrgb.npy')
     visualize_pointcloud(pcd = colored_pcd)

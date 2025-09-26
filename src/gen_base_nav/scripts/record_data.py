@@ -195,7 +195,7 @@ class DataRecorder():
         '''cv2.imwrite('front_cam_rgb.png', np.array(front_cam_rgb[:, :, ::-1]))
         import matplotlib.pyplot as plt
         vis_depth = front_cam_depth.copy()
-        vis_depth[vis_depth > 30] = 30
+        vis_depth[vis_depth > 15] = 15
         plt.imshow(vis_depth, cmap='Spectral_r')
         plt.axis('off')
         plt.savefig('front_cam_depth.png', bbox_inches='tight', pad_inches=0)'''

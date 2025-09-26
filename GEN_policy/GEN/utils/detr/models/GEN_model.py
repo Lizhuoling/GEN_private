@@ -32,50 +32,47 @@ class GEN_model(nn.Module):
         self.num_mixture = cfg['POLICY']['MIXTURE_GAUSSIAN_NUM']
         self.output_dim = self.num_mixture * (2 * state_dim + 1)
         self.camera_names = camera_names
-        self.backbone = backbone
+        
+        if len(self.camera_names) > 0:
+            self.backbone = backbone
+            self.obs_embed = nn.Embedding(len(cfg['DATA']['CAMERA_NAMES']), hidden_dim) 
+            self.input_proj = nn.Linear(self.backbone.num_features, hidden_dim)
+            
         self.transformer = transformer
         hidden_dim = transformer.d_model
         self.hidden_dim = hidden_dim
         
-        self.input_proj = nn.Linear(self.backbone.num_features, hidden_dim)
-        self.cur_status_proj = nn.Linear(6, hidden_dim)
-        self.cur_status_embed = nn.Embedding(1, hidden_dim)
         self.global_plan_proj = nn.Linear(7, hidden_dim)
         self.global_plan_embed = nn.Embedding(self.cfg['DATA']['GLOBAL_PLAN_LENGTH'], hidden_dim)
         
-        self.obs_embed = nn.Embedding(1, hidden_dim) 
         self.query_embed = nn.Embedding(chunk_size, hidden_dim)
         self.action_head = nn.Linear(hidden_dim, self.output_dim) # Decode transformer output as action.
 
-    def forward(self, cur_status, padded_global_plan, padded_global_plan_mask, envi_obs, is_train = False):
+    def forward(self, padded_global_plan, padded_global_plan_mask, envi_obs, is_train = False):
         """
-        cur_status: (batch, 6), float32
         padded_global_plan: (batch, max_plan_len, 7), float32
         padded_global_plan_mask: (batch, max_plan_len), bool
         envi_obs: (batch, N, H, W, 3), float32
         is_train: bool
         """
-        bs = cur_status.shape[0]
+        bs = padded_global_plan.shape[0]
         query_emb = self.query_embed.weight.unsqueeze(1).repeat(1, bs, 1)   # Left shape: (num_query, B, C)
         
-        if self.cfg['TRAIN']['LR_BACKBONE'] > 0:
-            feature, feature_is_pad = self.backbone(envi_obs)   # feature shape: (B, L, C), feature_is_pad shape: (B, L)
+        if len(self.camera_names) > 0:
+            if self.cfg['TRAIN']['LR_BACKBONE'] > 0:
+                feature, feature_is_pad = self.backbone(envi_obs)   # feature shape: (B, L, C), feature_is_pad shape: (B, L)
+            else:
+                with torch.no_grad():
+                    feature, feature_is_pad = self.backbone(envi_obs)
+                    feature, feature_is_pad = feature.detach(), feature_is_pad.detach()
+            src = self.input_proj(feature).permute(1, 0, 2)  # Left shape: (L, B, C)
+            obs_embed = self.obs_embed.weight[:, None, None]   # Left shape: (num_cam, 1, 1, C)
+            pos = obs_embed.expand(-1, src.shape[0] // obs_embed.shape[0], bs, -1).reshape(-1, bs, self.hidden_dim)   # Left shape: (L, B, C)
+            mask = feature_is_pad.clone()   # Left shape: (B, L)
         else:
-            with torch.no_grad():
-                feature, feature_is_pad = self.backbone(envi_obs)
-                feature, feature_is_pad = feature.detach(), feature_is_pad.detach()
-        
-        src = self.input_proj(feature).permute(1, 0, 2)  # Left shape: (L, B, C)
-        obs_embed = self.obs_embed.weight   # Left shape: (1, C)
-        pos = obs_embed[None].expand(src.shape[0], bs, -1)  # Left shape: (L, B, C)
-        mask = feature_is_pad.clone()   # Left shape: (B, L)
-
-        cur_status_src = self.cur_status_proj(cur_status)[None]   # (1, B, C)
-        cur_status_embed = self.cur_status_embed.weight   # (1, C)
-        cur_status_embed = cur_status_embed[None].expand(cur_status_src.shape[0], bs, -1)   # (1, B, C)
-        src = torch.cat([src, cur_status_src], dim=0)   # Left shape: (L+1, B, C)
-        pos = torch.cat([pos, cur_status_embed], dim=0)   # Left shape: (L+1, B, C)
-        mask = torch.cat([mask, torch.zeros((bs, 1), dtype=bool, device=mask.device)], dim=1)   # Left shape: (B, L+1)
+            src = torch.zeros((0, bs, self.hidden_dim)).to(envi_obs.device)
+            pos = torch.zeros((0, bs, self.hidden_dim)).to(envi_obs.device)
+            mask = torch.zeros((bs, 0)).to(envi_obs.device)
         
         global_plan_src = self.global_plan_proj(padded_global_plan).permute(1, 0, 2)   # Left shape: (max_plan_len, B, C)
         global_plan_embed = self.global_plan_embed.weight   # Left shape: (max_plan_len, C)

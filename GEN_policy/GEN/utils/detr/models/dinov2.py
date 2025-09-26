@@ -414,6 +414,7 @@ class DINOv2_Backbone(nn.Module):
         img_resize_w, img_resize_h = cfg['DATA']['IMG_RESIZE_SHAPE']
         self.resize_op = torchvision.transforms.Resize((img_resize_h, img_resize_w), antialias=True)
         self.norm_op = torchvision.transforms.Normalize(mean = cfg['DATA']['IMG_NORM_MEAN'], std = cfg['DATA']['IMG_NORM_STD'])
+
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         
     def forward(self, img_obs):
@@ -426,8 +427,8 @@ class DINOv2_Backbone(nn.Module):
         imgs = img_obs.view(B * N, C, H, W)
         process_imgs = self.preprocess(imgs)
         features = self.dinov2.forward_features(process_imgs)['x_norm_patchtokens']    # Left shape: (B * N, L, C)
-        features = features.reshape(B, N * features.shape[1], features.shape[2])
-        feature_is_pad = torch.zeros((B, features.shape[1]), device = features.device, dtype = torch.bool) # Left shape: (B, L)
+        features = features.reshape(B, N * features.shape[1], features.shape[2])    # Left shape: (B, N * L, C)
+        feature_is_pad = torch.zeros((B, features.shape[1]), device = features.device, dtype = torch.bool) # Left shape: (B, N * L)
         return features, feature_is_pad
         
     def preprocess(self, imgs):      

@@ -74,11 +74,10 @@ def eval_bc(cfg, ckpt_path):
 
 def forward_pass(data, policy, cfg, iter_cnt):
     if cfg['DATA']['MAIN_MODALITY'] == 'image':
-        ctrl_cmd, cur_status, padded_global_plan, padded_global_plan_mask, image_array = data
-        ctrl_cmd, cur_status, padded_global_plan, padded_global_plan_mask, envi_obs = ctrl_cmd.cuda(), cur_status.cuda(), padded_global_plan.cuda(), \
-            padded_global_plan_mask.cuda(), image_array.cuda()
+        ctrl_cmd, padded_global_plan, padded_global_plan_mask, image_array = data
+        ctrl_cmd, padded_global_plan, padded_global_plan_mask, envi_obs = ctrl_cmd.cuda(), padded_global_plan.cuda(), padded_global_plan_mask.cuda(), image_array.cuda()
         envi_obs = envi_obs.permute(0, 1, 4, 2, 3)
-        return policy(ctrl_cmd, cur_status, padded_global_plan, padded_global_plan_mask, envi_obs)
+        return policy(ctrl_cmd, padded_global_plan, padded_global_plan_mask, envi_obs)
     else:
         raise NotImplementedError
 

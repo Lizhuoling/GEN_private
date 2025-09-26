@@ -1,5 +1,5 @@
-exp_id=GEN_dinov2
-config_name=GEN_dinov2
+exp_id=GEN_dinov2_noimg
+config_name=GEN_dinov2_noimg
 
 nnodes=1
 nproc_per_node=1

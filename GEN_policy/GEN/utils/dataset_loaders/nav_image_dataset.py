@@ -47,12 +47,9 @@ class NavImageDataset(torch.utils.data.Dataset):
         with h5py.File(h5py_path, 'r') as root:
             sample_root = root[f'/samples/sample_{hdf5_frame_id}']
             
-            cmd_linear = sample_root['target_linear'][:].astype(np.float32)  # Left shape: (3,)
-            cmd_angular = sample_root['target_angular'][:].astype(np.float32)  # Left shape: (3,)
-            ctrl_cmd = np.concatenate((cmd_linear, cmd_angular), axis=0)  # Left shape: (6,)
-            cur_linear_acc = sample_root['cur_linear_acc'][:].astype(np.float32)    # Left shape: (3,)
-            cur_angular_vel = sample_root['cur_angular_vel'][:].astype(np.float32)  # Left shape: (3,)
-            cur_status = np.concatenate((cur_linear_acc, cur_angular_vel), axis=0)  # Left shape: (6,)
+            cmd_linear = sample_root['target_linear'][:].astype(np.float32)  # Left shape: (3,). Only the first value could be non-zero.
+            cmd_angular = sample_root['target_angular'][:].astype(np.float32)  # Left shape: (3,). Only the last value could be non-zero
+            ctrl_cmd = np.concatenate((cmd_linear[:1], cmd_angular[-1:]), axis=0)  # Left shape: (2,)
             global_plan = sample_root['global_plan'][:].astype(np.float32)  # Left shape: (unfixed_n, 7)
             padded_global_plan_mask = np.zeros((self.cfg['DATA']['GLOBAL_PLAN_LENGTH'],), dtype=np.bool)    # Left shape: (GLOBAL_PLAN_LENGTH,)
             if global_plan.shape[0] > self.cfg['DATA']['GLOBAL_PLAN_LENGTH']:
@@ -65,18 +62,20 @@ class NavImageDataset(torch.utils.data.Dataset):
             image_list = []
             for camera_name in self.camera_names:
                 image_list.append(sample_root[f'{camera_name}_rgb'][:].astype(np.float32))  # Left shape: (H, W, 3)
-            image_array = np.stack(image_list, axis=0)  # Left shape: (N, H, W, 3)
+            if len(image_list) == 0:
+                image_array = np.zeros((0, 0, 0, 3), dtype=np.float32)
+            else:
+                image_array = np.stack(image_list, axis=0)  # Left shape: (N, H, W, 3)
         
-        ctrl_cmd = torch.from_numpy(ctrl_cmd).float()   # left shape: (6,)
-        cur_status = torch.from_numpy(cur_status).float()   # left shape: (6,)
+        ctrl_cmd = torch.from_numpy(ctrl_cmd).float()   # left shape: (4,)
         padded_global_plan = torch.from_numpy(padded_global_plan).float()   # left shape: (GLOBAL_PLAN_LENGTH, 7)
         padded_global_plan_mask = torch.from_numpy(padded_global_plan_mask).bool()    # left shape: (GLOBAL_PLAN_LENGTH,)
         image_array = torch.from_numpy(image_array).float()    # Left shape: (N, H, W, 3)
 
-        return ctrl_cmd, cur_status, padded_global_plan, padded_global_plan_mask, image_array
+        return ctrl_cmd, padded_global_plan, padded_global_plan_mask, image_array
     
 def NavImage_collate_fn(batch):
-    batch_keys = ['ctrl_cmd', 'cur_status', 'padded_global_plan', 'padded_global_plan_mask', 'image_array']
+    batch_keys = ['ctrl_cmd', 'padded_global_plan', 'padded_global_plan_mask', 'image_array']
     all_data = {}
     stack_data_list = []
     for key in batch_keys:
