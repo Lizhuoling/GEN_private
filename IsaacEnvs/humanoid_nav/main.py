@@ -5,7 +5,7 @@
 import argparse      
 from isaaclab.app import AppLauncher
 # add argparse arguments
-parser = argparse.ArgumentParser(description="Quadrupedal robot navigation environment.")
+parser = argparse.ArgumentParser(description="Humanoid robot navigation environment.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 
 import cli_args
@@ -48,16 +48,13 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, CameraCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR, ISAAC_NUCLEUS_DIR, check_file_path, read_file
-from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
-from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.sim import SimulationCfg
 from isaaclab_tasks.utils import parse_env_cfg
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
-from rsl_rl.runners import OnPolicyRunner
 from rsl_rl.modules import ActorCritic
 import gymnasium as gym
 
-from aliengo_asset import ALIENGO_CFG
+from h1_asset import H1_CFG
 
 class TopicProcessor():
     def __init__(self, subscribe_topic_list, publish_topic_list, callback_timeout=0.1, callback_time_min=0.02, max_workers=None):
@@ -328,17 +325,15 @@ class TopicProcessor():
         tf_message = roslibpy.Message({'transforms': transforms})
         self.publisher_dict['/tf'].publish(tf_message)
 
-OBS_HISTORY_LENGTH = 5
+OBS_HISTORY_LENGTH = 11
 JOINTS_ORDER = [
-    "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint",
-    "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint",
-    "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint",
+    'left_hip_yaw_joint', 'left_hip_roll_joint', 'left_hip_pitch_joint', 'left_knee_joint', 'left_ankle_joint', 
+    'right_hip_yaw_joint', 'right_hip_roll_joint', 'right_hip_pitch_joint', 'right_knee_joint', 'right_ankle_joint', 
+    'torso_joint', 
+    'left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint', 
+    'right_shoulder_pitch_joint', 'right_shoulder_roll_joint', 'right_shoulder_yaw_joint', 'right_elbow_joint'
 ]
-JOINT_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-
-def constant_commands(env: ManagerBasedEnv) -> torch.Tensor:
-    """The generated command from the command generator."""
-    return torch.tensor([[0.5, 0.0, 0.2]], device=env.device).repeat(env.num_envs, 1)
+JOINT_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
     global topic_processor
@@ -351,6 +346,24 @@ def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
     print(f'cmd velocity: {cmd_vel_tensor}')
     return cmd_vel_tensor
 
+class PhaseGenerator():
+    def __init__(self,):
+        self.dt = 0.02
+        self.cycle_time = 0.8
+        self.step_cnt = 0
+            
+    def get_phase(self,):
+        phase = torch.Tensor([self.step_cnt * self.dt / self.cycle_time,]).cuda()
+        sin_pos = torch.sin(2 * torch.pi * phase).unsqueeze(1)
+        cos_pos = torch.cos(2 * torch.pi * phase).unsqueeze(1)
+        phase = torch.cat([sin_pos, cos_pos], dim = 1)  # Left shape: (1, 2)
+        return phase
+    
+def generate_phase(env: ManagerBasedEnv) -> torch.Tensor:
+    global phase_generator
+    phase = phase_generator.get_phase().repeat(env.num_envs, 1) # Left shape: (env.num_envs, 2)
+    return phase
+
 
 @configclass
 class SceneCfg(InteractiveSceneCfg):
@@ -360,10 +373,10 @@ class SceneCfg(InteractiveSceneCfg):
             prim_path="/World/ground", 
             spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
 
-    robot: ArticulationCfg = ALIENGO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = H1_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
     robot_front_cam =  CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
+        prim_path="{ENV_REGEX_NS}/Robot/front_cam",
         update_period=0.1,
         height=480,
         width=640,
@@ -371,7 +384,7 @@ class SceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=12.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
         ),
-        offset=CameraCfg.OffsetCfg(pos=(0.35, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.15, 0.0, 0.6), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
     )
     
     sky_light = AssetBaseCfg(
@@ -390,7 +403,6 @@ class ActionsCfg:
                                            scale=0.5, 
                                            use_default_offset=True)
 
-
 @configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
@@ -399,43 +411,34 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
         
-        base_vel = ObsTerm(func=mdp.base_lin_vel, # 3
-            history_length=OBS_HISTORY_LENGTH,
-            flatten_history_dim=False)
-
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, # 3
+        time_phase = ObsTerm(func=generate_phase, # 2
             history_length=OBS_HISTORY_LENGTH, 
-            flatten_history_dim=False)
-        
-        base_projected_gravity = ObsTerm(func=mdp.projected_gravity,    # 3
-            history_length=OBS_HISTORY_LENGTH,
             flatten_history_dim=False)
         
         velocity_commands = ObsTerm(func=ros2_commands, # 3, xy linear velocity command and yaw angular velocity command
             history_length=OBS_HISTORY_LENGTH, 
             flatten_history_dim=False)
+
+        base_ang_vel = ObsTerm(func = lambda env: mdp.base_ang_vel(env) * 0.25, # 3
+            history_length=OBS_HISTORY_LENGTH, 
+            flatten_history_dim=False)
         
-        joints_pos_delta = ObsTerm(func=mdp.joint_pos_rel,  # 12
+        base_ori_quat = ObsTerm(func=mdp.root_quat_w, # 4
             history_length=OBS_HISTORY_LENGTH,
-            flatten_history_dim=False,
-            params={
-            "asset_cfg": SceneEntityCfg("robot", joint_ids=JOINT_IDS),
-            })
+            flatten_history_dim=False)
         
-        joints_vel = ObsTerm(   # 12
-            func=mdp.joint_vel,
+        joints_pos_delta = ObsTerm(func=mdp.joint_pos_rel,  # 19
             history_length=OBS_HISTORY_LENGTH,
-            flatten_history_dim=False,
-            params={
-            "asset_cfg": SceneEntityCfg("robot", joint_ids=JOINT_IDS),
-            }
-        )
+            flatten_history_dim=False,)
         
-        actions = ObsTerm(func=mdp.last_action, # 12
+        joints_vel = ObsTerm(   # 19
+            func = lambda env: mdp.joint_vel(env) * 0.05,
+            history_length=OBS_HISTORY_LENGTH,
+            flatten_history_dim=False,)
+        
+        actions = ObsTerm(func=mdp.last_action, # 19
                           history_length=OBS_HISTORY_LENGTH, 
                           flatten_history_dim=False)
-        
-        # We do not collect clock_data signal here
         
         def __post_init__(self):
             self.enable_corruption = True
@@ -451,22 +454,19 @@ class EventCfg:
     reset_scene = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 @configclass
-class QuadrupedEnvCfg(ManagerBasedEnvCfg):
-    episode_length_s = 20.0
-    decimation = 4
+class HumanoidEnvCfg(ManagerBasedEnvCfg):
+    decimation = 5
     action_scale = 0.5
-    action_space = 12
-    observation_space = 48
-    state_space = 0
-    use_clock_signal = True
-    if(use_clock_signal):
-        observation_space += 4
+    action_space = 19
+    observation_space = 67
+    priv_obs_space = 46
     # observation history
     use_observation_history = True
-    history_length = 5
+    history_length = OBS_HISTORY_LENGTH
     if(use_observation_history):
         single_observation_space = observation_space # Placeholder. Later we may add map, but only from the latest obs
         observation_space *= history_length
+    observation_space += priv_obs_space
 
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 200,
@@ -489,95 +489,41 @@ class QuadrupedEnvCfg(ManagerBasedEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 4  # env decimation -> 50 Hz control
+        self.decimation = 5
         # simulation settings
         self.sim.dt = 0.005  # simulation timestep -> 200 Hz physics
         # self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.device = args_cli.device
-        
-class PhaseGenerator():
-    def __init__(self,):
-        desired_gait = "trot"  # trot, crawl, pace
-        if(desired_gait == "trot"):
-            self.step_freq = 1.4
-            self.duty_factor = 0.65
-            self.phase_offset = np.array([0.0, 0.5, 0.5, 0.0])
-            self._velocity_gait_multiplier = 1.0
-        elif(desired_gait == "crawl"):
-            self.step_freq = 0.5
-            self.duty_factor = 0.8
-            self.phase_offset = np.array([0.0, 0.5, 0.75, 0.25])
-            self.velocity_gait_multiplier = 0.5
-        elif(desired_gait == "pace"):
-            self.step_freq = 1.4
-            self.duty_factor = 0.7
-            self.phase_offset = np.array([0.8, 0.3, 0.8, 0.3])
-            self.velocity_gait_multiplier = 1.0
-        self.phase_signal = self.phase_offset
-            
-        self.RL_FREQ = 50
-            
-    def add_phase(self, command, obs):
-        self.phase_signal += self.step_freq * (1 / (self.RL_FREQ))
-        self.phase_signal = self.phase_signal % 1.0
-        phase_signal = self.phase_signal.reshape(1, 1, 4).repeat(obs.shape[1], axis = 1)
-        phase_signal = torch.Tensor(phase_signal).to(obs.device)
-        obs = torch.cat((obs, phase_signal), axis = -1)
-        zero_command_mask = torch.norm(command, dim = -1) < 0.01
-        obs[zero_command_mask][:, -4:] = -1.0
-        obs[48:52] = -1.0
-        return obs
-        
-def construct_policy():
-    policy_path = "aliengo_asset/aliengo_policy.pt"
-    
-    # For obtaining the policy network from rsl_rl.
-    policy_task_name = 'Locomotion-Aliengo-Rough-Blind' # Only for loading the policy network
-    env_cfg = parse_env_cfg(policy_task_name, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=True)
-    agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(policy_task_name, args_cli)
-    random_tensor = torch.randn(1, 260).cuda()
-    random_policy_obs = TensorDict(
-        {
-            "policy": random_tensor,
-        },
-        batch_size=torch.Size([1]),
-        device=None
-    )
-    cfg = agent_cfg.to_dict()
-    cfg['policy'] = {'class_name': 'ActorCritic', 'init_noise_std': 1.0, 'noise_std_type': 'scalar', 'actor_obs_normalization': {}, 'critic_obs_normalization': {}, \
-        'actor_hidden_dims': [128, 128, 128], 'critic_hidden_dims': [128, 128, 128], 'activation': 'elu'}
-    cfg["obs_groups"] = {'policy': ['policy'], 'critic': ['policy']}
-    policy_cfg = cfg["policy"]
 
-    # resolve deprecated normalization config
-    if cfg.get("empirical_normalization") is not None:
-        warnings.warn(
-            "The `empirical_normalization` parameter is deprecated. Please set `actor_obs_normalization` and "
-            "`critic_obs_normalization` as part of the `policy` configuration instead.",
-            DeprecationWarning,
-        )
-        if policy_cfg.get("actor_obs_normalization") is None:
-            policy_cfg["actor_obs_normalization"] = cfg["empirical_normalization"]
-        if policy_cfg.get("critic_obs_normalization") is None:
-            policy_cfg["critic_obs_normalization"] = cfg["empirical_normalization"]
-
-    # initialize the actor-critic
-    actor_critic_class = eval(policy_cfg.pop("class_name"))
-    actor_critic: ActorCritic = actor_critic_class(
-        random_policy_obs, cfg["obs_groups"], 12, **policy_cfg
-    ).cuda()
-    
-    loaded_dict = torch.load(policy_path)
-    actor_critic.load_state_dict(loaded_dict["model_state_dict"], strict = True)
-    
-    return actor_critic
+def euler_from_quaternion(quat_angle):
+        """
+        Convert a quaternion into euler angles (roll, pitch, yaw)
+        roll is rotation around x in radians (counterclockwise)
+        pitch is rotation around y in radians (counterclockwise)
+        yaw is rotation around z in radians (counterclockwise)
+        """
+        w = quat_angle[..., 0]; x = quat_angle[..., 1]; y = quat_angle[..., 2]; z = quat_angle[..., 3]
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = torch.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = torch.clip(t2, -1, 1)
+        pitch_y = torch.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = torch.atan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z
 
 def main(topic_processor, topic_publish_min_time = 0.1):
-    env_cfg = QuadrupedEnvCfg()
+    env_cfg = HumanoidEnvCfg()
     env = ManagerBasedEnv(cfg=env_cfg)
     
-    policy = construct_policy()
-    phase_generator = PhaseGenerator()
+    policy_jit_path = "h1_asset/pretrained_exp/traced/pretrained_exp-17500-jit.pt"
+    device = "cuda:0"
+    policy = torch.jit.load(policy_jit_path, map_location="cpu").to(device=device).eval()
 
     # Reset environment
     print("[INFO]: Resetting environment...")
@@ -588,18 +534,47 @@ def main(topic_processor, topic_publish_min_time = 0.1):
     
     torch.cuda.synchronize() if torch.cuda.is_available() else None
     last_publish_time = time.time()
+    inference_step = 0
+    
+    for i in range(2):
+        action = torch.zeros((1, 19)).cuda()
+        obs, _ = env.step(action)
     
     try:
         while True:
-            with torch.inference_mode():
-                policy_obs = obs["policy"]  # Left shape: (num_envs, time_len, attribute_len - 4), attribute_len should be 52
-                vel_command = policy_obs[:, :, 9:12]
-                policy_obs = phase_generator.add_phase(vel_command, policy_obs) # Left shape: (num_envs, time_len, attribute_len)
-                policy_obs = policy_obs.reshape(policy_obs.shape[0], -1).contiguous()
-                # infer action
-                action = policy.actor(policy_obs)[:, :12]
-                # step env
-                obs, _ = env.step(action)
+            env_obs = obs["policy"]  # Left shape: (num_envs, time_len, 69)
+            time_phase, velocity_commands, base_ang_vel, base_ori_quat, joint_pos_delta, joint_vel, actions = torch.split(env_obs, [2, 3, 3, 4, 19, 19, 19], dim = 2)
+            roll, pitch, yaw = euler_from_quaternion(base_ori_quat)   # roll, pitch, yaw shape: (num_envs, time_len)
+            imu_obs = torch.stack((roll, pitch), dim = 2)  # imu_obs shape: (num_envs, time_len, 2)
+            priv_latent = torch.zeros((imu_obs.shape[0], 46), device=imu_obs.device)    # Left shape: (num_envs, 46)
+            # The newest observation is at the end of the buffer.
+            cur_obs = torch.cat((
+                time_phase[:, -1],  # 2 dims
+                velocity_commands[:, -1],  # 3 dims
+                base_ang_vel[:, -1],   # 3 dims
+                imu_obs[:, -1],    # 2 dims
+                joint_pos_delta[:, -1], # 19 dims
+                joint_vel[:, -1],   # 19 dims
+                actions[:, -1],   # 19 dims
+            ), dim=-1)   # Left shape: (num_envs, 67)
+            historical_obs = torch.cat((
+                imu_obs[:, :-1],    # 2 dims
+                velocity_commands[:, :-1],  # 3 dims
+                base_ang_vel[:, :-1],   # 3 dims
+                imu_obs[:, :-1],    # 2 dims
+                joint_pos_delta[:, :-1], # 19 dims
+                joint_vel[:, :-1],   # 19 dims
+                actions[:, :-1],   # 19 dims
+            ), dim = -1)    # Left shape: (num_envs, time_len - 1, 67)
+            policy_obs = torch.cat((cur_obs, priv_latent, historical_obs.view(historical_obs.shape[0], -1)), dim = -1)  # Left shape: (num_envs, 783)
+            policy_obs = torch.clip(policy_obs, -100, 100)
+            policy_obs = policy_obs.to(device)
+
+            # infer action
+            action = policy(policy_obs.detach())    # Left shape: (num_envs, 19)
+            obs, _ = env.step(action)
+                
+            phase_generator.step_cnt += 1
                 
             img_rgb = env.scene['robot_front_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
             img_depth = env.scene['robot_front_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
@@ -634,6 +609,7 @@ if __name__ == "__main__":
         ('/cmd_vel', 'geometry_msgs/msg/Twist'),
     ]
     topic_processor = TopicProcessor(subscribe_topic_list, publish_topic_list)
+    phase_generator = PhaseGenerator()
     
     # run the main function
     main(topic_processor = topic_processor)
