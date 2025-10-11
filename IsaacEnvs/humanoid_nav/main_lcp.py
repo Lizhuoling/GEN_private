@@ -1,3 +1,5 @@
+# This environment is based on the H1 policy provided by lcp-loco.
+
 # Run "source /home/cvte/twilight/environment/Isaac_Sim_5.0/setup_conda_env.sh" before running this script.
 # Run ``python main.py --enable_cameras" to start this simulation environment.
 
@@ -54,7 +56,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
 from rsl_rl.modules import ActorCritic
 import gymnasium as gym
 
-from h1_asset import H1_CFG
+from h1_asset_lcp import H1_CFG
 
 class TopicProcessor():
     def __init__(self, subscribe_topic_list, publish_topic_list, callback_timeout=0.1, callback_time_min=0.02, max_workers=None):
@@ -324,16 +326,36 @@ class TopicProcessor():
         
         tf_message = roslibpy.Message({'transforms': transforms})
         self.publisher_dict['/tf'].publish(tf_message)
+        
+def get_inverse_indices(a):
+    inv_a = [0] * len(a)
+    for i, idx in enumerate(a):
+        inv_a[idx] = i
+    return inv_a
 
 OBS_HISTORY_LENGTH = 11
-JOINTS_ORDER = [
+Policy_JOINTS_ORDER = [
     'left_hip_yaw_joint', 'left_hip_roll_joint', 'left_hip_pitch_joint', 'left_knee_joint', 'left_ankle_joint', 
     'right_hip_yaw_joint', 'right_hip_roll_joint', 'right_hip_pitch_joint', 'right_knee_joint', 'right_ankle_joint', 
     'torso_joint', 
     'left_shoulder_pitch_joint', 'left_shoulder_roll_joint', 'left_shoulder_yaw_joint', 'left_elbow_joint', 
     'right_shoulder_pitch_joint', 'right_shoulder_roll_joint', 'right_shoulder_yaw_joint', 'right_elbow_joint'
 ]
-JOINT_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+Isaac_JOINTS_ORDER = [
+    'left_hip_yaw_joint', 'right_hip_yaw_joint',
+    'torso_joint',
+    'left_hip_roll_joint', 'right_hip_roll_joint',
+    'left_shoulder_pitch_joint', 'right_shoulder_pitch_joint',
+    'left_hip_pitch_joint', 'right_hip_pitch_joint',
+    'left_shoulder_roll_joint', 'right_shoulder_roll_joint',
+    'left_knee_joint', 'right_knee_joint',
+    'left_shoulder_yaw_joint', 'right_shoulder_yaw_joint',
+    'left_ankle_joint', 'right_ankle_joint',
+    'left_elbow_joint', 'right_elbow_joint'
+]
+
+PolicyID_to_IsaacID = [0, 5, 10, 1, 6, 11, 15, 2, 7, 12, 16, 3, 8, 13, 17, 4, 9, 14, 18]
+IsaacID_to_PolicyID = get_inverse_indices(PolicyID_to_IsaacID)
 
 def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
     global topic_processor
@@ -370,21 +392,26 @@ class SceneCfg(InteractiveSceneCfg):
     """Example scene configuration."""
 
     ground_cfg = AssetBaseCfg(
-            prim_path="/World/ground", 
-            spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+        prim_path="/World/ground", 
+        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+
+    #ground_cfg = AssetBaseCfg(
+    #    prim_path="/World/ground/", 
+    #    spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
 
     robot: ArticulationCfg = H1_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
     robot_front_cam =  CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/front_cam",
+        #prim_path="{ENV_REGEX_NS}/Robot/front_cam",
+        prim_path="{ENV_REGEX_NS}/Robot/torso_link/front_cam",
         update_period=0.1,
         height=480,
         width=640,
         data_types=["rgb", "distance_to_image_plane"],
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=12.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
-        ),
-        offset=CameraCfg.OffsetCfg(pos=(0.15, 0.0, 0.6), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        ),  
+        offset=CameraCfg.OffsetCfg(pos=(0.1, 0.0, 0.0), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
     )
     
     sky_light = AssetBaseCfg(
@@ -399,7 +426,7 @@ class SceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
     joint_pos = mdp.JointPositionActionCfg(asset_name="robot", 
-                                           joint_names=JOINTS_ORDER, 
+                                           joint_names=Isaac_JOINTS_ORDER, 
                                            scale=0.5, 
                                            use_default_offset=True)
 
@@ -419,7 +446,7 @@ class ObservationsCfg:
             history_length=OBS_HISTORY_LENGTH, 
             flatten_history_dim=False)
 
-        base_ang_vel = ObsTerm(func = lambda env: mdp.base_ang_vel(env) * 0.25, # 3
+        base_ang_vel = ObsTerm(func = mdp.base_ang_vel, # 3
             history_length=OBS_HISTORY_LENGTH, 
             flatten_history_dim=False)
         
@@ -432,13 +459,13 @@ class ObservationsCfg:
             flatten_history_dim=False,)
         
         joints_vel = ObsTerm(   # 19
-            func = lambda env: mdp.joint_vel(env) * 0.05,
+            func = mdp.joint_vel,
             history_length=OBS_HISTORY_LENGTH,
             flatten_history_dim=False,)
         
         actions = ObsTerm(func=mdp.last_action, # 19
-                          history_length=OBS_HISTORY_LENGTH, 
-                          flatten_history_dim=False)
+            history_length=OBS_HISTORY_LENGTH, 
+            flatten_history_dim=False)
         
         def __post_init__(self):
             self.enable_corruption = True
@@ -455,7 +482,7 @@ class EventCfg:
 
 @configclass
 class HumanoidEnvCfg(ManagerBasedEnvCfg):
-    decimation = 5
+    decimation = 1
     action_scale = 0.5
     action_space = 19
     observation_space = 67
@@ -521,7 +548,7 @@ def main(topic_processor, topic_publish_min_time = 0.1):
     env_cfg = HumanoidEnvCfg()
     env = ManagerBasedEnv(cfg=env_cfg)
     
-    policy_jit_path = "h1_asset/pretrained_exp/traced/pretrained_exp-17500-jit.pt"
+    policy_jit_path = "h1_asset/lcp_version/traced/pretrained_exp-17500-jit.pt"
     device = "cuda:0"
     policy = torch.jit.load(policy_jit_path, map_location="cpu").to(device=device).eval()
 
@@ -536,14 +563,22 @@ def main(topic_processor, topic_publish_min_time = 0.1):
     last_publish_time = time.time()
     inference_step = 0
     
-    for i in range(2):
+    for i in range(2):   
         action = torch.zeros((1, 19)).cuda()
         obs, _ = env.step(action)
     
     try:
         while True:
             env_obs = obs["policy"]  # Left shape: (num_envs, time_len, 69)
-            time_phase, velocity_commands, base_ang_vel, base_ori_quat, joint_pos_delta, joint_vel, actions = torch.split(env_obs, [2, 3, 3, 4, 19, 19, 19], dim = 2)
+            time_phase, velocity_commands, base_ang_vel, base_ori_quat, joint_pos_delta_isaac, joint_vel_isaac, actions_isaac = torch.split(env_obs, [2, 3, 3, 4, 19, 19, 19], dim = 2)
+            
+            actions_policy = actions_isaac[:, :, IsaacID_to_PolicyID]
+            joint_pos_delta_policy = joint_pos_delta_isaac[:, :, IsaacID_to_PolicyID]
+            joint_vel_policy = joint_vel_isaac[:, :, IsaacID_to_PolicyID]
+            
+            base_ang_vel = base_ang_vel * 0.25
+            joint_vel_policy = joint_vel_policy * 0.05
+            
             roll, pitch, yaw = euler_from_quaternion(base_ori_quat)   # roll, pitch, yaw shape: (num_envs, time_len)
             imu_obs = torch.stack((roll, pitch), dim = 2)  # imu_obs shape: (num_envs, time_len, 2)
             priv_latent = torch.zeros((imu_obs.shape[0], 46), device=imu_obs.device)    # Left shape: (num_envs, 46)
@@ -553,26 +588,27 @@ def main(topic_processor, topic_publish_min_time = 0.1):
                 velocity_commands[:, -1],  # 3 dims
                 base_ang_vel[:, -1],   # 3 dims
                 imu_obs[:, -1],    # 2 dims
-                joint_pos_delta[:, -1], # 19 dims
-                joint_vel[:, -1],   # 19 dims
-                actions[:, -1],   # 19 dims
+                joint_pos_delta_policy[:, -1], # 19 dims
+                joint_vel_policy[:, -1],   # 19 dims
+                actions_policy[:, -1],   # 19 dims
             ), dim=-1)   # Left shape: (num_envs, 67)
             historical_obs = torch.cat((
                 imu_obs[:, :-1],    # 2 dims
                 velocity_commands[:, :-1],  # 3 dims
                 base_ang_vel[:, :-1],   # 3 dims
                 imu_obs[:, :-1],    # 2 dims
-                joint_pos_delta[:, :-1], # 19 dims
-                joint_vel[:, :-1],   # 19 dims
-                actions[:, :-1],   # 19 dims
+                joint_pos_delta_policy[:, :-1], # 19 dims
+                joint_vel_policy[:, :-1],   # 19 dims
+                actions_policy[:, :-1],   # 19 dims
             ), dim = -1)    # Left shape: (num_envs, time_len - 1, 67)
             policy_obs = torch.cat((cur_obs, priv_latent, historical_obs.view(historical_obs.shape[0], -1)), dim = -1)  # Left shape: (num_envs, 783)
             policy_obs = torch.clip(policy_obs, -100, 100)
             policy_obs = policy_obs.to(device)
 
             # infer action
-            action = policy(policy_obs.detach())    # Left shape: (num_envs, 19)
-            obs, _ = env.step(action)
+            action_policy = policy(policy_obs.detach())    # Left shape: (num_envs, 19)
+            action_isaac = action_policy[:, PolicyID_to_IsaacID]
+            obs, _ = env.step(action_isaac)
                 
             phase_generator.step_cnt += 1
                 
