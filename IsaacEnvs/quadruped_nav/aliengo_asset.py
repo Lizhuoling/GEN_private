@@ -1,10 +1,7 @@
-# Copyright (c) 2022-2024, The Berkeley Humanoid Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
+# Sourced from https://github.com/iit-DLSLab/basic-locomotion-dls-isaaclab.git
 
 import isaaclab.sim as sim_utils
-from basic_locomotion_dls_isaaclab.actuators import IdentifiedActuatorElectricCfg
+from isaaclab.actuators import DCMotorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 
 
@@ -15,7 +12,7 @@ friction_static_mujoco = 0.2
 friction_dynamic_mujoco = 0.6
 armature_mujoco = 0.01
 
-ALIENGO_HIP_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+ALIENGO_HIP_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_hip_joint"],
     effort_limit=44.4,
     velocity_limit=21.0,
@@ -23,12 +20,9 @@ ALIENGO_HIP_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=stiffness_mujoco,
     damping=damping_mujoco,
     armature=armature_mujoco,
-    friction_static=friction_static_mujoco,
-    activation_vel=0.1,
-    friction_dynamic=friction_dynamic_mujoco,
 )
 
-ALIENGO_THIGH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+ALIENGO_THIGH_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_thigh_joint"],
     effort_limit=44.4,
     velocity_limit=21.0,
@@ -36,12 +30,9 @@ ALIENGO_THIGH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=stiffness_mujoco,
     damping=damping_mujoco,
     armature=armature_mujoco,
-    friction_static=friction_static_mujoco,
-    activation_vel=0.1,
-    friction_dynamic=friction_dynamic_mujoco,
 )
 
-ALIENGO_CALF_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+ALIENGO_CALF_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_calf_joint"],
     effort_limit=44.4,
     velocity_limit=21.0,
@@ -49,9 +40,6 @@ ALIENGO_CALF_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=stiffness_mujoco,
     damping=damping_mujoco,
     armature=armature_mujoco,
-    friction_static=friction_static_mujoco,
-    activation_vel=0.1,
-    friction_dynamic=friction_dynamic_mujoco,
 )
 
 
@@ -74,8 +62,10 @@ ALIENGO_CFG = ArticulationCfg(
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(-6.0, -1.0, 0.4),  # Used in warehouse
-        rot=(0.0, 0.0, 0.0, 1.0),   # Used in warehouse, wxyz
+        #pos=(-6.0, -1.0, 0.4),  # Used in warehouse
+        #rot=(0.0, 0.0, 0.0, 1.0),   # Used in warehouse, wxyz
+        pos=(60.1, -8.6, 4.0),  # Used in 3D GS garden
+        rot=(0.0, 0.0, 0.0, 1.0),   # Used in 3D GS garden, wxyz
         joint_pos={
             ".*L_hip_joint": 0.0,
             ".*R_hip_joint": 0.0,

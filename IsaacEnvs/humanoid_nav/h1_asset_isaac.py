@@ -1,8 +1,10 @@
 import isaaclab.sim as sim_utils
-from basic_locomotion_dls_isaaclab.actuators import IdentifiedActuatorElectricCfg
+from isaaclab.actuators import DCMotorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 
-H1_HIP_YAW_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+from isaaclab.actuators import DCMotorCfg, DelayedPDActuatorCfg, RemotizedPDActuatorCfg
+
+H1_HIP_YAW_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_hip_yaw_joint"],
     effort_limit=200.0,
     velocity_limit=23.0,
@@ -10,12 +12,9 @@ H1_HIP_YAW_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=150.0,
     damping=5.0,
     armature=0.01,
-    friction_static=0.2,
-    activation_vel=0.1,
-    friction_dynamic=0.6,
 )
 
-H1_HIP_ROLL_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_HIP_ROLL_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_hip_roll_joint"],
     effort_limit=200.0,
     velocity_limit=23.0,
@@ -23,12 +22,9 @@ H1_HIP_ROLL_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=150.0,
     damping=5.0,
     armature=0.01,
-    friction_static=0.2,
-    activation_vel=0.1,
-    friction_dynamic=0.6,
 )
 
-H1_HIP_PITCH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_HIP_PITCH_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_hip_pitch_joint"],
     effort_limit=200.0,
     velocity_limit=23.0,
@@ -36,12 +32,9 @@ H1_HIP_PITCH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=200.0,
     damping=5.0,
     armature=0.01,
-    friction_static=0.2,
-    activation_vel=0.1,
-    friction_dynamic=0.6,
 )
 
-H1_KNEE_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_KNEE_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_knee_joint"],
     effort_limit=300.0,
     velocity_limit=14.0,
@@ -49,12 +42,9 @@ H1_KNEE_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=200.0,
     damping=5.0,
     armature=0.01,
-    friction_static=0.2,
-    activation_vel=0.1,
-    friction_dynamic=0.6,
 )
 
-H1_ANKLE_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_ANKLE_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_ankle_joint"],
     effort_limit=40.0,
     velocity_limit=9.0,
@@ -62,12 +52,9 @@ H1_ANKLE_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=20.0,
     damping=4.0,
     armature=0.01,
-    friction_static=0.2,
-    activation_vel=0.1,
-    friction_dynamic=0.6,
 )
 
-H1_TORSO_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_TORSO_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=["torso_joint"],
     effort_limit=200.0,
     velocity_limit=23.0,
@@ -75,12 +62,9 @@ H1_TORSO_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=200.0,
     damping=5.0,
     armature=0.01,
-    friction_static=0.2,
-    activation_vel=0.1,
-    friction_dynamic=0.6,
 )
 
-H1_SHOULDER_PITCH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_SHOULDER_PITCH_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_shoulder_pitch_joint"],
     effort_limit=40.0,
     velocity_limit=9.0,
@@ -88,12 +72,9 @@ H1_SHOULDER_PITCH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=40.0,
     damping=10.0,
     armature=0.005,
-    friction_static=0.1,
-    activation_vel=0.1,
-    friction_dynamic=0.3,
 )
 
-H1_SHOULDER_ROLL_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_SHOULDER_ROLL_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_shoulder_roll_joint"],
     effort_limit=40.0,
     velocity_limit=9.0,
@@ -101,12 +82,9 @@ H1_SHOULDER_ROLL_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=40.0,
     damping=10.0,
     armature=0.005,
-    friction_static=0.1,
-    activation_vel=0.1,
-    friction_dynamic=0.3,
 )
 
-H1_SHOULDER_YAW_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_SHOULDER_YAW_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_shoulder_yaw_joint"],
     effort_limit=18.0,
     velocity_limit=20.0,
@@ -114,12 +92,9 @@ H1_SHOULDER_YAW_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=40.0,
     damping=10.0,
     armature=0.005,
-    friction_static=0.1,
-    activation_vel=0.1,
-    friction_dynamic=0.3,
 )
 
-H1_ELBOW_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
+H1_ELBOW_ACTUATOR_CFG = DCMotorCfg(
     joint_names_expr=[".*_elbow_joint"],
     effort_limit=18.0,
     velocity_limit=20.0,
@@ -127,9 +102,6 @@ H1_ELBOW_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     stiffness=40.0,
     damping=10.0,
     armature=0.005,
-    friction_static=0.1,
-    activation_vel=0.1,
-    friction_dynamic=0.3,
 )
 
 H1_CFG = ArticulationCfg(
@@ -154,8 +126,10 @@ H1_CFG = ArticulationCfg(
     ),
 
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(-6.0, -1.0, 1.0),
-        rot=(0.0, 0.0, 0.0, 1.0),   # wxyz
+        #pos=(-6.0, -1.0, 0.4),  # Used in warehouse
+        #rot=(0.0, 0.0, 0.0, 1.0),   # Used in warehouse, wxyz
+        pos=(60.1, -8.6, 5.0),  # Used in 3D GS garden
+        rot=(0.0, 0.0, 0.0, 1.0),   # Used in 3D GS garden, wxyz
         joint_pos={
             ".*_hip_yaw_joint": 0.0,
             ".*_hip_roll_joint": 0.0,

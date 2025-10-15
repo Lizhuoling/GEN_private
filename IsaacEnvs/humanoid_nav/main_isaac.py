@@ -1,7 +1,8 @@
 # This environment is based on the H1 policy provided by lcp-loco.
 
+# To import 3D GS based scene, must use IsaacLab v2.2.0.
 # Run "source /home/cvte/twilight/environment/Isaac_Sim_5.0/setup_conda_env.sh" before running this script.
-# Run ``python main.py --enable_cameras" to start this simulation environment.
+# Run ``python main_isaac.py --enable_cameras" to start this simulation environment.
 
 # Initialize as a Isaac Sim launch file.
 import argparse      
@@ -352,13 +353,13 @@ def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
 class SceneCfg(InteractiveSceneCfg):
     """Example scene configuration."""
 
+    #ground_cfg = AssetBaseCfg(
+    #    prim_path="/World/ground", 
+    #    spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+
     ground_cfg = AssetBaseCfg(
         prim_path="/World/ground", 
-        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
-
-    #ground_cfg = AssetBaseCfg(
-    #    prim_path="/World/ground/", 
-    #    spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
+        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
 
     robot: ArticulationCfg = H1_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     

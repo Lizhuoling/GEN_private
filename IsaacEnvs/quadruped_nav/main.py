@@ -1,5 +1,6 @@
 # Run "source /home/cvte/twilight/environment/Isaac_Sim_5.0/setup_conda_env.sh" before running this script.
 # Run ``python main.py --enable_cameras" to start this simulation environment.
+# To import 3D GS based scene, must use IsaacLab v2.2.0.
 
 # Initialize as a Isaac Sim launch file.
 import argparse      
@@ -356,9 +357,13 @@ def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
 class SceneCfg(InteractiveSceneCfg):
     """Example scene configuration."""
 
+    #ground_cfg = AssetBaseCfg(
+    #        prim_path="/World/ground", 
+    #        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+    
     ground_cfg = AssetBaseCfg(
-            prim_path="/World/ground", 
-            spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+        prim_path="/World/ground", 
+        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
 
     robot: ArticulationCfg = ALIENGO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
@@ -530,46 +535,9 @@ class PhaseGenerator():
         
 def construct_policy():
     policy_path = "aliengo_asset/aliengo_policy.pt"
-    
-    # For obtaining the policy network from rsl_rl.
-    policy_task_name = 'Locomotion-Aliengo-Rough-Blind' # Only for loading the policy network
-    env_cfg = parse_env_cfg(policy_task_name, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=True)
-    agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(policy_task_name, args_cli)
-    random_tensor = torch.randn(1, 260).cuda()
-    random_policy_obs = TensorDict(
-        {
-            "policy": random_tensor,
-        },
-        batch_size=torch.Size([1]),
-        device=None
-    )
-    cfg = agent_cfg.to_dict()
-    cfg['policy'] = {'class_name': 'ActorCritic', 'init_noise_std': 1.0, 'noise_std_type': 'scalar', 'actor_obs_normalization': {}, 'critic_obs_normalization': {}, \
-        'actor_hidden_dims': [128, 128, 128], 'critic_hidden_dims': [128, 128, 128], 'activation': 'elu'}
-    cfg["obs_groups"] = {'policy': ['policy'], 'critic': ['policy']}
-    policy_cfg = cfg["policy"]
-
-    # resolve deprecated normalization config
-    if cfg.get("empirical_normalization") is not None:
-        warnings.warn(
-            "The `empirical_normalization` parameter is deprecated. Please set `actor_obs_normalization` and "
-            "`critic_obs_normalization` as part of the `policy` configuration instead.",
-            DeprecationWarning,
-        )
-        if policy_cfg.get("actor_obs_normalization") is None:
-            policy_cfg["actor_obs_normalization"] = cfg["empirical_normalization"]
-        if policy_cfg.get("critic_obs_normalization") is None:
-            policy_cfg["critic_obs_normalization"] = cfg["empirical_normalization"]
-
-    # initialize the actor-critic
-    actor_critic_class = eval(policy_cfg.pop("class_name"))
-    actor_critic: ActorCritic = actor_critic_class(
-        random_policy_obs, cfg["obs_groups"], 12, **policy_cfg
-    ).cuda()
-    
+    actor_critic = ActorCritic(num_actor_obs = 260, num_critic_obs = 260, num_actions = 12, actor_hidden_dims = [128, 128, 128], critic_hidden_dims = [128, 128, 128]).cuda()
     loaded_dict = torch.load(policy_path)
     actor_critic.load_state_dict(loaded_dict["model_state_dict"], strict = True)
-    
     return actor_critic
 
 def main(topic_processor, topic_publish_min_time = 0.1):
