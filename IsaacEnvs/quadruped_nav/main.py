@@ -17,7 +17,6 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-
 import sys
 import os
 import pdb
@@ -357,13 +356,13 @@ def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
 class SceneCfg(InteractiveSceneCfg):
     """Example scene configuration."""
 
-    #ground_cfg = AssetBaseCfg(
-    #        prim_path="/World/ground", 
-    #        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
-    
     ground_cfg = AssetBaseCfg(
-        prim_path="/World/ground", 
-        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
+            prim_path="/World/ground", 
+            spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+    
+    #ground_cfg = AssetBaseCfg(
+    #    prim_path="/World/ground", 
+    #    spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
 
     robot: ArticulationCfg = ALIENGO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     

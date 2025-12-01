@@ -62,10 +62,10 @@ ALIENGO_CFG = ArticulationCfg(
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        #pos=(-6.0, -1.0, 0.4),  # Used in warehouse
-        #rot=(0.0, 0.0, 0.0, 1.0),   # Used in warehouse, wxyz
-        pos=(60.1, -8.6, 4.0),  # Used in 3D GS garden
-        rot=(0.0, 0.0, 0.0, 1.0),   # Used in 3D GS garden, wxyz
+        pos=(-6.0, -1.0, 0.4),  # Used in warehouse
+        rot=(0.0, 0.0, 0.0, 1.0),   # Used in warehouse, wxyz
+        #pos=(60.1, -8.6, 4.0),  # Used in 3D GS garden
+        #rot=(0.0, 0.0, 0.0, 1.0),   # Used in 3D GS garden, wxyz
         joint_pos={
             ".*L_hip_joint": 0.0,
             ".*R_hip_joint": 0.0,
