@@ -5,7 +5,6 @@ Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
 Please cite our work if the code is helpful to you.
 """
 
-import pdb
 import random
 import numbers
 import scipy
@@ -62,7 +61,7 @@ class Collect(object):
         self.kwargs = kwargs
 
     def __call__(self, data_dict):
-        data = dict() 
+        data = dict()
         if isinstance(self.keys, str):
             self.keys = [self.keys]
         for key in self.keys:
@@ -142,6 +141,7 @@ class NormalizeColor(object):
             data_dict["color"] = data_dict["color"] / 255
         return data_dict
 
+
 @TRANSFORMS.register_module()
 class NormalizeCoord(object):
     def __call__(self, data_dict):
@@ -162,18 +162,7 @@ class PositiveShift(object):
             data_dict["coord"] -= coord_min
         return data_dict
 
-@TRANSFORMS.register_module()
-class DepthFilter(object):
-    def __init__(self, range):
-        self.range = range
-        
-    def __call__(self, data_dict):
-        depth = data_dict['depth'][:, 0]    # Left shape: (n,)
-        in_range_mask = (depth >= self.range[0]) & (depth <= self.range[1])
-        for key in data_dict.keys():
-            if key != 'depth' and type(data_dict[key]) == np.ndarray:  data_dict[key] = data_dict[key][in_range_mask]
-        return data_dict
-        
+
 @TRANSFORMS.register_module()
 class CenterShift(object):
     def __init__(self, apply_z=True):
@@ -181,7 +170,6 @@ class CenterShift(object):
 
     def __call__(self, data_dict):
         if "coord" in data_dict.keys():
-            if data_dict["coord"].shape[0] == 0: return data_dict
             x_min, y_min, z_min = data_dict["coord"].min(axis=0)
             x_max, y_max, _ = data_dict["coord"].max(axis=0)
             if self.apply_z:
@@ -941,36 +929,6 @@ class GridSample(object):
             hashed_arr = np.bitwise_xor(hashed_arr, arr[:, j])
         return hashed_arr
 
-@TRANSFORMS.register_module()
-class SimpleGridSample(object):
-    def __init__(self, grid_size=0.05, return_grid_coord=False):
-        self.grid_size = grid_size
-        self.return_grid_coord = return_grid_coord
-
-    def __call__(self, data_dict):
-        assert "coord" in data_dict.keys()
-        if data_dict["coord"].shape[0] == 0: return data_dict
-        scaled_coord = data_dict["coord"] / self.grid_size
-        grid_coord = np.floor(scaled_coord).astype(int)
-        min_coord = grid_coord.min(0)
-        grid_coord -= min_coord
-        scaled_coord -= min_coord
-
-        _, idx_unique = np.unique(grid_coord, axis=0, return_index=True)
-        data_dict = self.index_operator(data_dict, idx_unique)
-        if self.return_grid_coord:
-            data_dict["grid_coord"] = grid_coord[idx_unique]
-        return data_dict
-
-    @staticmethod
-    def index_operator(data_dict, idx):
-        new_data_dict = {}
-        for key, value in data_dict.items():
-            if isinstance(value, np.ndarray):
-                new_data_dict[key] = value[idx]
-            else:
-                new_data_dict[key] = value
-        return new_data_dict
 
 @TRANSFORMS.register_module()
 class SphereCrop(object):
@@ -1003,24 +961,6 @@ class SphereCrop(object):
             data_dict = index_operator(data_dict, idx_crop)
         return data_dict
 
-@TRANSFORMS.register_module()
-class ElementPad(object):
-    def __call__(self, data_dict):
-        bs_ids = np.arange(data_dict['batch_size'])
-        missing_bs_ids = np.setdiff1d(bs_ids, data_dict['batch'])
-        for missing_bs_id in missing_bs_ids:
-            for key in data_dict.keys():
-                if not isinstance(data_dict[key], np.ndarray): continue
-                if key == 'batch':
-                    data_dict[key] = np.concatenate((data_dict[key], np.array([missing_bs_id])), axis=0)
-                else:
-                    ori_shape = list(data_dict[key].shape)
-                    ori_shape[0] = 1
-                    pad_array = np.zeros(ori_shape, dtype = data_dict[key].dtype)
-                    data_dict[key] = np.concatenate((data_dict[key], pad_array), axis=0)
-            if "grid_coord" not in data_dict.keys():
-                data_dict["grid_coord"] = np.zeros((1, 3), dtype = np.int64)
-        return data_dict
 
 @TRANSFORMS.register_module()
 class ShufflePoint(object):
@@ -1267,18 +1207,16 @@ def default():
     ]
     return Compose(config)
 
-def VIRT_preprocess(cfg):
+def GEN_navdp(cfg):
     config = [
-        dict(type="DepthFilter", range=(0.05, 3)),
-        dict(type="CenterShift", apply_z=True),
         dict(
-            type="SimpleGridSample",
+            type="GridSample",
             grid_size=cfg['DATA']['VOXEL_DOWNSAMPLE_VOXEL_SIZE'],
+            hash_type="fnv",
+            mode="train",
             return_grid_coord=True,
         ),
-        dict(
-            type = 'ElementPad',
-        ),
+        dict(type="NormalizeColor"),
         dict(type="ToTensor"),
         dict(
             type="Collect",

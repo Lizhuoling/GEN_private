@@ -47,7 +47,8 @@ DATA:
   MAIN_MODALITY: 'image'  # 'image' or 'point'
   CAMERA_NAMES: ['front_cam', 'left_cam', 'back_cam', 'right_cam']
   IMG_RESIZE_SHAPE: [640, 480]
-  VOXEL_DOWNSAMPLE_VOXEL_SIZE: 0.01
+  VALID_DEPTH_RANGE: [0.1, 5.0]
+  VOXEL_DOWNSAMPLE_VOXEL_SIZE: 0.1
   IMG_NORM_MEAN: [0.485, 0.456, 0.406]
   IMG_NORM_STD: [0.229, 0.224, 0.225]
   GLOBAL_PLAN_LENGTH: 40

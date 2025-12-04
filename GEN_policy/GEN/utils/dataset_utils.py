@@ -7,11 +7,12 @@ import logging
 import tqdm
 import pdb
 import h5py
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, DistributedSampler
 
 from utils import comm
 from utils.samplers import distributed_sampler
 from utils.dataset_loaders.nav_image_dataset import NavImageDataset, NavImage_collate_fn
+from utils.dataset_loaders.navdp_dataset import NavDP_Base_Datset, navdp_collate_fn
 from utils.dataset_loaders.concat_dataset import CustomConcatDataset
 
 def get_norm_stats(dataset_dir, norm_keys, norm_max_len = -1):
@@ -50,9 +51,48 @@ def get_hdf5_list(path):
     return sorted(hdf5_list)
 
 def load_data(cfg):
-    return load_data(cfg)
+    if cfg['POLICY']['POLICY_NAME'] == 'GEN_navdp':
+        return load_navdp_data(cfg)
+    else:
+        return load_my_data(cfg)
 
-def load_data(cfg):
+def load_navdp_data(cfg):
+    if cfg['IS_DEBUG']:
+        num_workers = 0
+    else:
+        num_workers = cfg['TRAIN']['NUM_WORKERS']
+    train_sample_per_gpu = cfg['TRAIN']['BATCH_SIZE'] // comm.get_world_size()
+    collate_fn = navdp_collate_fn
+    train_dataset = NavDP_Base_Datset(
+        cfg = cfg,
+        root_dirs = cfg['DATA']['DATASET_DIR'][0],
+        preload_path='/dataset/nav-e2e/data_navdp/NavDPData/navdp_dataset_GEN.json',
+        preload=True,
+        memory_size=1,
+        predict_size=24,
+        batch_size=cfg['TRAIN']['BATCH_SIZE'],
+        scene_data_scale=1.0,
+        trajectory_data_scale=1.0,
+    )
+    
+    if comm.is_main_process():
+        logger = logging.getLogger("GEN")
+        logger.info("Training set sample number: {}.".format(len(train_dataset)))
+        
+    train_batch_sampler = DistributedSampler(train_dataset, num_replicas=int(os.environ['WORLD_SIZE']), rank=int(os.environ['LOCAL_RANK']), shuffle=True, seed=1234)
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=train_sample_per_gpu,
+        sampler=train_batch_sampler,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True,
+        collate_fn=collate_fn,
+    )
+
+    return train_dataloader, None
+
+def load_my_data(cfg):
     dataset_ids_map_dict_list, dataset_indices_list = [], []
     for dataset_path in cfg['DATA']['DATASET_DIR']:
         dataset_ids_map_dict, dataset_max_idx = get_ids_map(dataset_path)   # dataset_ids_map_dict: {'file1_name': (start_id, end_id), 'file2_name': (start_id, end_id), ...}

@@ -16,7 +16,7 @@ from GEN.utils.detr.util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
 from .dinov2 import DINOv2_Backbone
-#from .custom_sonata import get_custom_sonata
+from .sonata import get_sonata
 
 class FrozenBatchNorm2d(torch.nn.Module):
     """
@@ -106,9 +106,7 @@ class Joiner(nn.Sequential):
             out.append(x)
             # position encoding
             pos.append(self[1](x).to(x.dtype))
-
         return out, pos
-
 
 def build_backbone(cfg):
     if cfg['POLICY']['BACKBONE'] == 'resnet18':
@@ -121,5 +119,5 @@ def build_backbone(cfg):
     elif cfg['POLICY']['BACKBONE'] == 'dinov2_s':
         model = DINOv2_Backbone(cfg)
     elif cfg['POLICY']['BACKBONE'] == 'sonata':
-        model = get_custom_sonata(cfg)
+        model = get_sonata(cfg)
     return model

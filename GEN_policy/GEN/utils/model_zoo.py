@@ -11,7 +11,7 @@ from torch.hub import HASH_REGEX
 from GEN.utils.comm import is_main_process
 from GEN.utils.comm import synchronize
 from GEN.utils.models.policy.GEN_Policy import GEN_Policy
-
+from GEN.utils.models.policy.GEN_navdp_Policy import GEN_navdp_Policy
 
 # very similar to https://github.com/pytorch/pytorch/blob/master/torch/utils/model_zoo.py
 # but with a few improvements and modifications
@@ -61,6 +61,8 @@ def cache_url(url, model_dir=None, progress=True):
 def make_policy(policy_name, cfg):
     if policy_name == 'GEN':
         policy = GEN_Policy(cfg)
+    elif policy_name == 'GEN_navdp':
+        policy = GEN_navdp_Policy(cfg)
     else:
         raise NotImplementedError
 

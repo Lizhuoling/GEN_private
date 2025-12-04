@@ -73,11 +73,13 @@ def eval_bc(cfg, ckpt_path):
     envi_manager.inference()
 
 def forward_pass(data, policy, cfg, iter_cnt):
-    if cfg['DATA']['MAIN_MODALITY'] == 'image':
+    if cfg['POLICY']['POLICY_NAME'] == 'GEN' and cfg['DATA']['MAIN_MODALITY'] == 'image':
         ctrl_cmd, padded_global_plan, padded_global_plan_mask, image_array = data
         ctrl_cmd, padded_global_plan, padded_global_plan_mask, envi_obs = ctrl_cmd.cuda(), padded_global_plan.cuda(), padded_global_plan_mask.cuda(), image_array.cuda()
         envi_obs = envi_obs.permute(0, 1, 4, 2, 3)
         return policy(ctrl_cmd, padded_global_plan, padded_global_plan_mask, envi_obs)
+    elif cfg['POLICY']['POLICY_NAME'] == 'GEN_navdp':
+        return policy(data)
     else:
         raise NotImplementedError
 
