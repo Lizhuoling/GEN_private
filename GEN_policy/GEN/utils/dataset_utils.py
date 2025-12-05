@@ -61,7 +61,7 @@ def load_navdp_data(cfg):
         num_workers = 0
     else:
         num_workers = cfg['TRAIN']['NUM_WORKERS']
-    train_sample_per_gpu = cfg['TRAIN']['BATCH_SIZE'] // comm.get_world_size()
+    train_sample_per_gpu = cfg['TRAIN']['BATCH_SIZE_PER_GPU']
     collate_fn = navdp_collate_fn
     train_dataset = NavDP_Base_Datset(
         cfg = cfg,
@@ -70,7 +70,6 @@ def load_navdp_data(cfg):
         preload=True,
         memory_size=1,
         predict_size=24,
-        batch_size=cfg['TRAIN']['BATCH_SIZE'],
         scene_data_scale=1.0,
         trajectory_data_scale=1.0,
     )
@@ -104,7 +103,7 @@ def load_my_data(cfg):
         num_workers = 0
     else:
         num_workers = cfg['TRAIN']['NUM_WORKERS']
-    train_sample_per_gpu = cfg['TRAIN']['BATCH_SIZE'] // comm.get_world_size()
+    train_sample_per_gpu = cfg['TRAIN']['BATCH_SIZE_PER_GPU']
     collate_fn = torch.utils.data.dataloader.default_collate
     dataset_list = []
     for i, dataset_dir in enumerate(cfg['DATA']['DATASET_DIR']):

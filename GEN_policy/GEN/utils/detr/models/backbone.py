@@ -16,7 +16,8 @@ from GEN.utils.detr.util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
 from .dinov2 import DINOv2_Backbone
-from .sonata import get_sonata
+from .sonata_backbone import get_sonata
+from .concerto_backbone import get_concerto
 
 class FrozenBatchNorm2d(torch.nn.Module):
     """
@@ -120,4 +121,6 @@ def build_backbone(cfg):
         model = DINOv2_Backbone(cfg)
     elif cfg['POLICY']['BACKBONE'] == 'sonata':
         model = get_sonata(cfg)
+    elif 'concerto' in cfg['POLICY']['BACKBONE']:
+        model = get_concerto(cfg)
     return model

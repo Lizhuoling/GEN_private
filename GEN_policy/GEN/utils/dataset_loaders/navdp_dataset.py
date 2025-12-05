@@ -26,7 +26,6 @@ class NavDP_Base_Datset(Dataset):
         preload=False,
         memory_size=8,
         predict_size=24,
-        batch_size=64,
         scene_data_scale=1.0,
         trajectory_data_scale=1.0,
     ):
@@ -42,7 +41,6 @@ class NavDP_Base_Datset(Dataset):
         self.trajectory_depth_path = []
         self.trajectory_afford_path = []
         self.item_cnt = 0
-        self.batch_size = batch_size
         self.batch_time_sum = 0.0
         self._last_time = None
 
