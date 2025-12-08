@@ -1,5 +1,5 @@
-exp_id=GEN_navdp_sonata_fb
-config_name=GEN_navdp_sonata_fb
+exp_id=GEN_navdp_concerto_fb
+config_name=GEN_navdp_concerto_fb
 
 nnodes=1
 nproc_per_node=8
