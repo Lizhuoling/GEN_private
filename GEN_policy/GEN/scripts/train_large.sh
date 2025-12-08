@@ -9,8 +9,6 @@ master_port=29515
 
 source /root/miniforge3/bin/activate GEN
 
-pwd
-
 cd GEN_policy/GEN
 
 torchrun --nnodes=$nnodes --nproc_per_node=$nproc_per_node --node_rank=$node_rank --master_addr=$master_addr --master_port $master_port \
