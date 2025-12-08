@@ -78,11 +78,12 @@ def load_navdp_data(cfg):
         logger = logging.getLogger("GEN")
         logger.info("Training set sample number: {}.".format(len(train_dataset)))
         
-    train_batch_sampler = DistributedSampler(train_dataset, num_replicas=int(os.environ['WORLD_SIZE']), rank=int(os.environ['LOCAL_RANK']), shuffle=True, seed=1234)
+    #train_sampler = DistributedSampler(train_dataset, num_replicas=int(os.environ['WORLD_SIZE']), rank=int(os.environ['LOCAL_RANK']), shuffle=True, seed=1234)
+    train_sampler = distributed_sampler.InfiniteTrainingSampler(len(train_dataset))
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=train_sample_per_gpu,
-        sampler=train_batch_sampler,
+        sampler=train_sampler,
         num_workers=num_workers,
         pin_memory=True,
         drop_last=True,

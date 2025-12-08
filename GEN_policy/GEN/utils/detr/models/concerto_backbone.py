@@ -103,6 +103,8 @@ class Concerto(nn.Module):
         batch_max_point_num = 0
         for i in range(B):
             batch_feat = feature[feature_batch_idxs == i]
+            if self.cfg["DATA"]['MAX_TOKEN_LENGTH'] > 0:
+                if batch_feat.shape[0] > self.cfg["DATA"]['MAX_TOKEN_LENGTH']: batch_feat = batch_feat[:self.cfg["DATA"]['MAX_TOKEN_LENGTH']]
             batch_repr_list.append(batch_feat)
             if batch_feat.shape[0] > batch_max_point_num:
                 batch_max_point_num = batch_feat.shape[0]
