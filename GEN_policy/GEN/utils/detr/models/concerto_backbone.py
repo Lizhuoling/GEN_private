@@ -29,7 +29,7 @@ class Concerto(nn.Module):
             
         # Load concerto
         ckpt = torch.load(self.cfg['POLICY']['BACKBONE_PATH'])
-        ckpt['config']['enc_patch_size'] = (256, 256, 256, 256, 256)
+        ckpt['config']['enc_patch_size'] = (1024, 1024, 1024, 1024, 1024)
         ckpt['config']['enable_flash'] = True
 
         self.sonata = PointTransformerV3(**ckpt["config"])
@@ -114,6 +114,7 @@ class Concerto(nn.Module):
 
         batch_repr = torch.stack(batch_repr_list, dim = 0)    # (bs, max_n, c)
         batch_repr_is_pad = torch.stack(batch_repr_is_pad_list, dim = 0)    # (bs, max_n)
+
         return batch_repr, batch_repr_is_pad 
     
     def normal_from_cross_product_torch(self, points_coord):

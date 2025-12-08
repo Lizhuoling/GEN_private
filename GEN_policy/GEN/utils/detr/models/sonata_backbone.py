@@ -21,7 +21,7 @@ class Sonata(nn.Module):
             
         # Load sonata
         ckpt = torch.load(self.cfg['POLICY']['BACKBONE_PATH'])
-        ckpt['config']['enc_patch_size'] = (256, 256, 256, 256, 256)
+        ckpt['config']['enc_patch_size'] = (1024, 1024, 1024, 1024, 1024)
         ckpt['config']['enable_flash'] = True
         self.sonata = PointTransformerV3(**ckpt["config"])
         self.sonata.load_state_dict(ckpt["state_dict"])
