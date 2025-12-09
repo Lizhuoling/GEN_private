@@ -844,11 +844,44 @@ class GridSample(object):
         key_sort = key[idx_sort]
         _, inverse, count = np.unique(key_sort, return_inverse=True, return_counts=True)
         if self.mode == "train":  # train mode
-            idx_select = (
-                np.cumsum(np.insert(count, 0, 0)[0:-1])
-                + np.random.randint(0, count.max(), count.size) % count
-            )
-            idx_unique = idx_sort[idx_select]
+            # Check if batch information is available and should be preserved
+            has_batch_info = "batch" in data_dict and "batch" in data_dict.get("index_valid_keys", [])
+            
+            if has_batch_info:
+                # Ensure each batch has at least one point selected per grid cell
+                batch_ids = data_dict["batch"][idx_sort]  # batch IDs in sorted order
+                idx_select_list = []
+                
+                # For each unique grid cell
+                cumsum = np.insert(np.cumsum(count), 0, 0)
+                for i in range(len(count)):
+                    cell_start = cumsum[i]
+                    cell_end = cumsum[i + 1]
+                    cell_indices = np.arange(cell_start, cell_end)
+                    cell_batch_ids = batch_ids[cell_indices]
+                    
+                    # Get unique batches in this cell
+                    unique_batches = np.unique(cell_batch_ids)
+                    
+                    # For each batch, randomly select at least one point
+                    selected_in_cell = []
+                    for batch_id in unique_batches:
+                        batch_mask = cell_batch_ids == batch_id
+                        batch_indices_in_cell = cell_indices[batch_mask]
+                        # Randomly select one point from this batch
+                        selected_idx = batch_indices_in_cell[np.random.randint(0, len(batch_indices_in_cell))]
+                        selected_in_cell.append(selected_idx)
+                    
+                    idx_select_list.extend(selected_in_cell)
+                
+                idx_unique = idx_sort[np.array(idx_select_list)]
+            else:
+                # Original behavior: random selection without batch awareness
+                idx_select = (
+                    np.cumsum(np.insert(count, 0, 0)[0:-1])
+                    + np.random.randint(0, count.max(), count.size) % count
+                )
+                idx_unique = idx_sort[idx_select]
             if "sampled_index" in data_dict:
                 # for ScanNet data efficient, we need to make sure labeled point is sampled.
                 idx_unique = np.unique(

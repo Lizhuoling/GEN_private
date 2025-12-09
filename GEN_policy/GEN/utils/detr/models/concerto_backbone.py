@@ -72,16 +72,34 @@ class Concerto(nn.Module):
         point_rgb = point_rgb[valid_point_mask] # Left shape: (n, 3)
         batch_ids = batch_ids[valid_point_mask] # Left shape: (n,)
 
+        # Check if any batch has no points after filtering, and add a dummy point (0, 0, 0) for those batches
+        unique_batches = torch.unique(batch_ids).cpu().numpy() if len(batch_ids) > 0 else np.array([], dtype=np.int64)
+        all_batches = np.arange(B)
+        missing_batches = np.setdiff1d(all_batches, unique_batches).tolist()
+        
+        if len(missing_batches) > 0:
+            # Add dummy points for missing batches
+            device = point_coord.device
+            dummy_coord = torch.zeros((len(missing_batches), 3), device=device, dtype=point_coord.dtype)
+            dummy_normal = torch.zeros((len(missing_batches), 3), device=device, dtype=point_normal.dtype)
+            dummy_rgb = torch.zeros((len(missing_batches), 3), device=device, dtype=point_rgb.dtype)
+            dummy_batch_ids = torch.tensor(missing_batches, device=device, dtype=batch_ids.dtype)
+            
+            point_coord = torch.cat([point_coord, dummy_coord], dim=0)
+            point_normal = torch.cat([point_normal, dummy_normal], dim=0)
+            point_rgb = torch.cat([point_rgb, dummy_rgb], dim=0)
+            batch_ids = torch.cat([batch_ids, dummy_batch_ids], dim=0)
+
         data = dict(coord=point_coord.cpu().numpy(), color=point_rgb.cpu().numpy(), normal=point_normal.cpu().numpy(), batch=batch_ids.cpu().numpy())
         # Add 'batch' to index_valid_keys so it gets downsampled along with coord, color, normal
         data['index_valid_keys'] = ['coord', 'color', 'normal', 'batch']
-        data = self.transform(data)
+        transform_data = self.transform(data)
 
-        for key in data.keys():
-            if isinstance(data[key], torch.Tensor):
-                data[key] = data[key].cuda()
+        for key in transform_data.keys():
+            if isinstance(transform_data[key], torch.Tensor):
+                transform_data[key] = transform_data[key].cuda()
                 
-        point = self.sonata(data)
+        point = self.sonata(transform_data)
         for _ in range(self.use_level_num - 1):
             assert "pooling_parent" in point.keys()
             assert "pooling_inverse" in point.keys()
@@ -116,6 +134,9 @@ class Concerto(nn.Module):
 
         batch_repr = torch.stack(batch_repr_list, dim = 0)    # (bs, max_n, c)
         batch_repr_is_pad = torch.stack(batch_repr_is_pad_list, dim = 0)    # (bs, max_n)
+        
+        indices = torch.nonzero(torch.all(batch_repr_is_pad, dim=1), as_tuple=True)[0]
+        first_idx = indices[0].item() if len(indices) > 0 else -1
 
         return batch_repr, batch_repr_is_pad 
     

@@ -46,8 +46,6 @@ class GEN_navdp_Policy(nn.Module):
             _, k_indices = torch.max(mixture_weights[-1], dim=-1)   # k_indices shape: (B, chunk_size)
             absolute_diff = torch.gather(last_dec_diff, 1, k_indices.unsqueeze(2)).squeeze(-1)  # Left shape: (B, chunk_size)
             batch_real_loss = ((~batch_labels_invalid) * absolute_diff).sum(1) / torch.clamp((~batch_labels_invalid).sum(1), min = 1)   # Left shape: (B,)
-            #if torch.isnan(batch_real_loss).any():
-            #    pdb.set_trace()
             batch_real_loss = torch.nan_to_num(batch_real_loss, nan=0.0)
             real_loss = batch_real_loss.mean()
             loss_dict['real_loss'] = real_loss.item()
