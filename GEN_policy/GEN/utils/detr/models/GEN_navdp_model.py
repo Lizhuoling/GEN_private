@@ -84,9 +84,6 @@ class GEN_NavDP_model(nn.Module):
             means = means[-1]   # Left shape: (B, num_query, num_mixture, state_dim)
             variances = variances[-1]   # Left shape: (B, num_query, num_mixture, state_dim)
             mixture_weights = mixture_weights[-1]  # mixture_weights shape: (B, num_query, num_mixture)
-            
-        if torch.isnan(means).any():
-            pdb.set_trace()
 
         return means, variances, mixture_weights
     

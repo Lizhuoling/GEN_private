@@ -62,6 +62,24 @@ class Sonata(nn.Module):
         point_normal = point_normal[valid_point_mask] # Left shape: (n, 3)
         point_rgb = point_rgb[valid_point_mask] # Left shape: (n, 3)
         batch_ids = batch_ids[valid_point_mask] # Left shape: (n,)
+        
+        # Check if any batch has no points after filtering, and add a dummy point (0, 0, 0) for those batches
+        unique_batches = torch.unique(batch_ids).cpu().numpy() if len(batch_ids) > 0 else np.array([], dtype=np.int64)
+        all_batches = np.arange(B)
+        missing_batches = np.setdiff1d(all_batches, unique_batches).tolist()
+        
+        if len(missing_batches) > 0:
+            # Add dummy points for missing batches
+            device = point_coord.device
+            dummy_coord = torch.zeros((len(missing_batches), 3), device=device, dtype=point_coord.dtype)
+            dummy_normal = torch.zeros((len(missing_batches), 3), device=device, dtype=point_normal.dtype)
+            dummy_rgb = torch.zeros((len(missing_batches), 3), device=device, dtype=point_rgb.dtype)
+            dummy_batch_ids = torch.tensor(missing_batches, device=device, dtype=batch_ids.dtype)
+            
+            point_coord = torch.cat([point_coord, dummy_coord], dim=0)
+            point_normal = torch.cat([point_normal, dummy_normal], dim=0)
+            point_rgb = torch.cat([point_rgb, dummy_rgb], dim=0)
+            batch_ids = torch.cat([batch_ids, dummy_batch_ids], dim=0)
 
         data = dict(coord=point_coord.cpu().numpy(), color=point_rgb.cpu().numpy(), normal=point_normal.cpu().numpy(), batch=batch_ids.cpu().numpy())
         # Add 'batch' to index_valid_keys so it gets downsampled along with coord, color, normal
