@@ -111,6 +111,10 @@ class IsaacNavEnviManager():
         
         if cfg['DATA']['MAIN_MODALITY'] == 'image':
             self.topic_subscriber = self.setup_vision_callback()
+        elif cfg['DATA']['MAIN_MODALITY'] == 'point':
+            self.topic_subscriber = self.setup_point_callback()
+        else:
+            raise NotImplementedError
         
     def setup_vision_callback(self,):
         vision_subscribe_topic_list = [
@@ -124,6 +128,16 @@ class IsaacNavEnviManager():
             ('/right_stereo_camera/left/image_raw', 'sensor_msgs/msg/Image'),
         ]
         return TopicSubscriber(vision_subscribe_topic_list)
+    
+    def setup_point_callback(self,):
+        point_subscribe_topic_list = [
+            ('/front_stereo_camera/left/image_raw', 'sensor_msgs/msg/Image'),
+            ('/front_stereo_camera/left/depth_raw', 'sensor_msgs/msg/Image'),
+            ('/chassis/odom', 'nav_msgs/msg/Odometry'),
+            ('/robot/vel', 'geometry_msgs/Twist'),
+            ('/goal_pose', 'geometry_msgs/PoseStamped')
+        ]
+        return TopicSubscriber(point_subscribe_topic_list)
         
     def inference(self,):
         with torch.no_grad():
@@ -135,9 +149,8 @@ class IsaacNavEnviManager():
                     time.sleep(0.005)
                     continue
                 
-                if self.cfg['DATA']['MAIN_MODALITY'] == 'image':
-                    policy_input_array = self.get_policy_input(msg_dict)
-                    policy_input = self.transform_policy_input(policy_input_array)
+                policy_input_array = self.get_policy_input(msg_dict)
+                policy_input = self.transform_policy_input(policy_input_array)
                 
                 action = self.policy(None, policy_input['padded_global_plan'], policy_input['padded_global_plan_mask'], policy_input['envi_obs'])
                 action = action[0, 0].cpu().numpy().tolist()  # Left shape: (2)
@@ -149,57 +162,67 @@ class IsaacNavEnviManager():
                 self.logger.info(f'An action published: {vel_cmd}.')
                 
     def get_policy_input(self, msg_dict):
-        odom_global_plan_trans, odom_global_plan_quat = self.convert_global_plan_to_array(msg_dict['/transformed_global_plan'])
-        chassis_odom_pos = msg_dict['/chassis/odom']['pose']['pose']['position']
-        chassis_odom_pos = np.array([chassis_odom_pos['x'], chassis_odom_pos['y'], chassis_odom_pos['z']])
-        chassis_odom_quat = msg_dict['/chassis/odom']['pose']['pose']['orientation']
-        chassis_odom_quat = np.array([chassis_odom_quat['x'], chassis_odom_quat['y'], chassis_odom_quat['z'], chassis_odom_quat['w']])
-        base_global_plan_trans, base_global_plan_quat = self.traj_frame_reproject(odom_global_plan_trans, odom_global_plan_quat, chassis_odom_pos, chassis_odom_quat)
-        global_plan = np.concatenate((base_global_plan_trans, base_global_plan_quat), axis=1)    # numpy array of shape (n, 7)
-        
-        front_img = self.image_to_numpy(msg_dict['/front_stereo_camera/left/image_raw'])
-        left_img = self.image_to_numpy(msg_dict['/left_stereo_camera/left/image_raw'])
-        back_img = self.image_to_numpy(msg_dict['/back_stereo_camera/left/image_raw'])
-        right_img = self.image_to_numpy(msg_dict['/right_stereo_camera/left/image_raw'])
-        
-        return dict(
-            global_plan=global_plan,
-            front_cam_rgb=front_img,
-            left_cam_rgb=left_img,
-            back_cam_rgb=back_img,
-            right_cam_rgb=right_img,
-        )
+        if self.cfg['DATA']['MAIN_MODALITY'] == 'image':
+            odom_global_plan_trans, odom_global_plan_quat = self.convert_global_plan_to_array(msg_dict['/transformed_global_plan'])
+            chassis_odom_pos = msg_dict['/chassis/odom']['pose']['pose']['position']
+            chassis_odom_pos = np.array([chassis_odom_pos['x'], chassis_odom_pos['y'], chassis_odom_pos['z']])
+            chassis_odom_quat = msg_dict['/chassis/odom']['pose']['pose']['orientation']
+            chassis_odom_quat = np.array([chassis_odom_quat['x'], chassis_odom_quat['y'], chassis_odom_quat['z'], chassis_odom_quat['w']])
+            base_global_plan_trans, base_global_plan_quat = self.traj_frame_reproject(odom_global_plan_trans, odom_global_plan_quat, chassis_odom_pos, chassis_odom_quat)
+            global_plan = np.concatenate((base_global_plan_trans, base_global_plan_quat), axis=1)    # numpy array of shape (n, 7)
+            
+            front_img = self.image_to_numpy(msg_dict['/front_stereo_camera/left/image_raw'])
+            left_img = self.image_to_numpy(msg_dict['/left_stereo_camera/left/image_raw'])
+            back_img = self.image_to_numpy(msg_dict['/back_stereo_camera/left/image_raw'])
+            right_img = self.image_to_numpy(msg_dict['/right_stereo_camera/left/image_raw'])
+            
+            return dict(
+                global_plan=global_plan,
+                front_cam_rgb=front_img,
+                left_cam_rgb=left_img,
+                back_cam_rgb=back_img,
+                right_cam_rgb=right_img,
+            )
+        elif self.cfg['DATA']['MAIN_MODALITY'] == 'point':
+            pdb.set_trace()
+        else:
+            raise NotImplementedError
         
     def transform_policy_input(self, policy_input):
-        global_plan = policy_input['global_plan']
-        padded_global_plan_mask = np.zeros((self.cfg['DATA']['GLOBAL_PLAN_LENGTH'],), dtype=np.bool)    # Left shape: (GLOBAL_PLAN_LENGTH,)
-        if global_plan.shape[0] > self.cfg['DATA']['GLOBAL_PLAN_LENGTH']:
-            padded_global_plan = global_plan[:self.cfg['DATA']['GLOBAL_PLAN_LENGTH']]   # Left shape: (GLOBAL_PLAN_LENGTH, 7)
-        else:
-            padded_global_plan = np.concatenate((global_plan, np.zeros((self.cfg['DATA']['GLOBAL_PLAN_LENGTH'] - global_plan.shape[0], \
-                global_plan.shape[1]), dtype=np.float32)), axis=0)  # Left shape: (GLOBAL_PLAN_LENGTH, 7)
-            padded_global_plan_mask[global_plan.shape[0]:] = True
-        
-        image_list = []
-        for camera_name in self.cfg['DATA']['CAMERA_NAMES']:
-            image_list.append(policy_input[f'{camera_name}_rgb'][:].astype(np.float32))  # Left shape: (H, W, 3)
-        if len(image_list) > 0:
-            image_array = np.stack(image_list, axis=0)  # Left shape: (N, H, W, 3)
-        else:
-            image_array = np.zeros((0, 0, 0, 3), dtype=np.float32)  # Left shape: (1, 1, 1, 3)
+        if self.cfg['DATA']['MAIN_MODALITY'] == 'image':
+            global_plan = policy_input['global_plan']
+            padded_global_plan_mask = np.zeros((self.cfg['DATA']['GLOBAL_PLAN_LENGTH'],), dtype=np.bool)    # Left shape: (GLOBAL_PLAN_LENGTH,)
+            if global_plan.shape[0] > self.cfg['DATA']['GLOBAL_PLAN_LENGTH']:
+                padded_global_plan = global_plan[:self.cfg['DATA']['GLOBAL_PLAN_LENGTH']]   # Left shape: (GLOBAL_PLAN_LENGTH, 7)
+            else:
+                padded_global_plan = np.concatenate((global_plan, np.zeros((self.cfg['DATA']['GLOBAL_PLAN_LENGTH'] - global_plan.shape[0], \
+                    global_plan.shape[1]), dtype=np.float32)), axis=0)  # Left shape: (GLOBAL_PLAN_LENGTH, 7)
+                padded_global_plan_mask[global_plan.shape[0]:] = True
+            
+            image_list = []
+            for camera_name in self.cfg['DATA']['CAMERA_NAMES']:
+                image_list.append(policy_input[f'{camera_name}_rgb'][:].astype(np.float32))  # Left shape: (H, W, 3)
+            if len(image_list) > 0:
+                image_array = np.stack(image_list, axis=0)  # Left shape: (N, H, W, 3)
+            else:
+                image_array = np.zeros((0, 0, 0, 3), dtype=np.float32)  # Left shape: (1, 1, 1, 3)
 
-        padded_global_plan = torch.from_numpy(padded_global_plan).float()[None]   # left shape: (GLOBAL_PLAN_LENGTH, 7)
-        padded_global_plan_mask = torch.from_numpy(padded_global_plan_mask).bool()[None]    # left shape: (GLOBAL_PLAN_LENGTH,)
-        image_array = torch.from_numpy(image_array).float()[None]    # Left shape: (1, N, H, W, 3)
-        
-        padded_global_plan, padded_global_plan_mask, envi_obs = padded_global_plan.cuda(), padded_global_plan_mask.cuda(), image_array.cuda()
-        envi_obs = envi_obs.permute(0, 1, 4, 2, 3)
-        
-        return dict(
-            padded_global_plan=padded_global_plan,
-            padded_global_plan_mask=padded_global_plan_mask,
-            envi_obs=envi_obs,
-        )
+            padded_global_plan = torch.from_numpy(padded_global_plan).float()[None]   # left shape: (GLOBAL_PLAN_LENGTH, 7)
+            padded_global_plan_mask = torch.from_numpy(padded_global_plan_mask).bool()[None]    # left shape: (GLOBAL_PLAN_LENGTH,)
+            image_array = torch.from_numpy(image_array).float()[None]    # Left shape: (1, N, H, W, 3)
+            
+            padded_global_plan, padded_global_plan_mask, envi_obs = padded_global_plan.cuda(), padded_global_plan_mask.cuda(), image_array.cuda()
+            envi_obs = envi_obs.permute(0, 1, 4, 2, 3)
+            
+            return dict(
+                padded_global_plan=padded_global_plan,
+                padded_global_plan_mask=padded_global_plan_mask,
+                envi_obs=envi_obs,
+            )
+        elif self.cfg['DATA']['MAIN_MODALITY'] == 'point':
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
     
     def get_data(self,):
         msg_dict = {}

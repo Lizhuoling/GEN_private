@@ -3,7 +3,7 @@ conda activate GEN
 
 # Move to the ROOT of this repo
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-#pip install torch==2.9.0 torchvision==0.24.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
+#pip install torch==2.7.0 torchvision==0.22.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
 pip install torch==2.3.1 torchvision==0.18.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # Install sonata

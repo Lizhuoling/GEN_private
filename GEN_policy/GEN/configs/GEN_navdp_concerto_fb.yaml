@@ -3,7 +3,7 @@ __BASE__: "Base.yaml"
 POLICY:
   POLICY_NAME: "GEN_navdp"
   BACKBONE: "concerto_s"
-  BACKBONE_PATH: "/dataset/nav-e2e/data_navdp/gen_pretrain/concerto_small.pth"
+  BACKBONE_PATH: "pretrain/concerto_small.pth"
   STATE_DIM: 3
   MIXTURE_GAUSSIAN_NUM: 3
   ENC_LAYERS: 1

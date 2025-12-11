@@ -701,9 +701,9 @@ def main(topic_processor, topic_publish_min_time = 0.5):
                 topic_processor.publish_rgb_image(frontcam_rgb, '/front_stereo_camera/left/image_raw')
                 topic_processor.publish_depth_image(frontcam_depth, '/front_stereo_camera/left/depth_raw')
                 
-                lidar_obs, min_distance = get_lidar_obs(sensor = env.scene['lidar_sensor'], robot = env.scene['robot'], perception_dit = lidar_setting_dict, min_target = torch.Tensor([0.25, 0]).cuda())
-                lidar_scan = lidar_obs.cpu().numpy().astype(np.float32)[0]
-                topic_processor.publish_lidar_scan(lidar_scan, '/lidar/scan_2d')
+                #lidar_obs, min_distance = get_lidar_obs(sensor = env.scene['lidar_sensor'], robot = env.scene['robot'], perception_dit = lidar_setting_dict, min_target = torch.Tensor([0.25, 0]).cuda())
+                #lidar_scan = lidar_obs.cpu().numpy().astype(np.float32)[0]
+                #topic_processor.publish_lidar_scan(lidar_scan, '/lidar/scan_2d')
 
                 '''leftcam_rgb = env.scene['robot_left_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
                 leftcam_depth = env.scene['robot_left_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
