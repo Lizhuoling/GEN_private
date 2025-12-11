@@ -19,6 +19,7 @@ simulation_app = app_launcher.app
 
 import sys
 import os
+import math
 import pdb
 import cv2
 import base64
@@ -45,11 +46,12 @@ from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, CameraCfg
+from isaaclab.sensors import ContactSensorCfg, CameraCfg, LidarSensorCfg    # Install lidar to Isaac Sim following https://github.com/aCodeDog/OmniPerception
+from isaaclab.sensors.ray_caster.patterns import LivoxPatternCfg
+from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR, ISAAC_NUCLEUS_DIR, check_file_path, read_file
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
-from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.sim import SimulationCfg
 from isaaclab_tasks.utils import parse_env_cfg
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
@@ -58,12 +60,20 @@ from rsl_rl.modules import ActorCritic
 import gymnasium as gym
 
 from aliengo_asset import ALIENGO_CFG
+from lidar_utils import get_lidar_obs
+
+sensor_pose_dict = dict(
+    robot_front_cam = dict(pos=(0.25, 0.0, 0.015), rot=(0.5, 0.5, -0.5, -0.5), convention="isaac"), # quat: wxyz
+    robot_left_cam = dict(pos=(-0.1, 0.1, 0.015), rot=(0.7071, 0.7071, 0.0, 0.0), convention="isaac"),
+    robot_right_cam = dict(pos=(-0.1, -0.1, 0.015), rot=(0.0, 0.0, 0.7071, 0.7071), convention="isaac"),
+    robot_rear_cam = dict(pos=(-0.25, 0.0, 0.015), rot=(0.5, 0.5, 0.5, 0.5), convention="isaac"),
+    lidar_sensor = dict(pos=(0.1, 0.0, 0.1), rot=(1.0, 0.0, 0.0, 0.0), convention="isaac"),
+)
 
 class TopicProcessor():
-    def __init__(self, subscribe_topic_list, publish_topic_list, callback_timeout=0.1, callback_time_min=0.02, max_workers=None):
+    def __init__(self, subscribe_topic_list, publish_topic_list, callback_time_min=0.05, max_workers=None):
         self.subscribe_topic_list = subscribe_topic_list
         self.publish_topic_list = publish_topic_list
-        self.callback_timeout = callback_timeout
         self.callback_time_min = callback_time_min
         self.logger = logging.getLogger("Isaac")
         
@@ -216,6 +226,40 @@ class TopicProcessor():
         })
         self.publisher_dict[topic_name].publish(msg)
         
+    def publish_lidar_scan(self, lidar_scan, topic_name):
+        layout = {
+            'dim': [
+                {
+                    'label': 'dim0',
+                    'size': lidar_scan.shape[0],
+                    'stride': lidar_scan.shape[0],
+                }
+            ],
+            'data_offset': 0,
+        }
+        data_list = lidar_scan.tolist()
+        msg = {
+            'layout': layout,
+            'data': data_list
+        }
+        self.publisher_dict[topic_name].publish(msg)
+        
+    def publish_robot_vel(self, robot_vel, topic_name):
+        robot_vel = robot_vel.tolist()
+        twist_msg = {
+            'linear': {
+                'x': robot_vel[0],
+                'y': robot_vel[1],
+                'z': robot_vel[2]
+            },
+            'angular': {
+                'x': robot_vel[3],
+                'y': robot_vel[4],
+                'z': robot_vel[5]
+            }
+        }
+        self.publisher_dict[topic_name].publish(twist_msg)
+        
     def publish_odom(self, robot_data, topic_name):
         initial_root_state  = robot_data.default_root_state.clone()
         current_root_state = robot_data.root_state_w.clone()
@@ -325,6 +369,29 @@ class TopicProcessor():
         }
         transforms.append(world2base_tf)
         
+        for sensor_name in sensor_pose_dict.keys():
+            sensor_pose = sensor_pose_dict[sensor_name]
+            pos = sensor_pose['pos']
+            rot = sensor_pose['rot']    # wxyz
+            cam_tf = {
+                'header': {
+                    'stamp': now,
+                    'frame_id': 'base_link'
+                },
+                'child_frame_id': sensor_name,
+                'transform': {
+                    'translation': {'x': float(pos[0]),
+                                    'y': float(pos[1]),
+                                    'z': float(pos[2])},
+                    'rotation':    {'x': float(rot[1]),
+                                    'y': float(rot[2]),
+                                    'z': float(rot[3]),
+                                    'w': float(rot[0])}
+                }
+            }
+            transforms.append(cam_tf)
+            
+        
         tf_message = roslibpy.Message({'transforms': transforms})
         self.publisher_dict['/tf'].publish(tf_message)
 
@@ -351,7 +418,6 @@ def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
     print(f'cmd velocity: {cmd_vel_tensor}')
     return cmd_vel_tensor
 
-
 @configclass
 class SceneCfg(InteractiveSceneCfg):
     """Example scene configuration."""
@@ -375,7 +441,63 @@ class SceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=12.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
         ),
-        offset=CameraCfg.OffsetCfg(pos=(0.35, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos = sensor_pose_dict['robot_front_cam']['pos'], rot = sensor_pose_dict['robot_front_cam']['rot'], convention = sensor_pose_dict['robot_front_cam']['convention']),
+    )
+
+    robot_left_cam =  CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base/left_cam",
+        update_period=0.1,
+        height=480,
+        width=640,
+        data_types=["rgb", "distance_to_image_plane"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=12.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        ),
+        offset=CameraCfg.OffsetCfg(pos = sensor_pose_dict['robot_left_cam']['pos'], rot = sensor_pose_dict['robot_left_cam']['rot'], convention = sensor_pose_dict['robot_left_cam']['convention']),
+    )
+    
+    robot_right_cam =  CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base/right_cam",
+        update_period=0.1,
+        height=480,
+        width=640,
+        data_types=["rgb", "distance_to_image_plane"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=12.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        ),
+        offset=CameraCfg.OffsetCfg(pos = sensor_pose_dict['robot_right_cam']['pos'], rot = sensor_pose_dict['robot_right_cam']['rot'], convention = sensor_pose_dict['robot_right_cam']['convention']),
+    )
+    
+    robot_rear_cam =  CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base/rear_cam",
+        update_period=0.1,
+        height=480,
+        width=640,
+        data_types=["rgb", "distance_to_image_plane"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=12.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        ),
+        offset=CameraCfg.OffsetCfg(pos = sensor_pose_dict['robot_rear_cam']['pos'], rot = sensor_pose_dict['robot_rear_cam']['rot'], convention = sensor_pose_dict['robot_rear_cam']['convention']),
+    )
+
+    lidar_sensor = LidarSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=LidarSensorCfg.OffsetCfg(pos = sensor_pose_dict['lidar_sensor']['pos'], rot = sensor_pose_dict['lidar_sensor']['rot']),
+        attach_yaw_only=False,
+        ray_alignment = "world",
+        pattern_cfg=LivoxPatternCfg(
+            sensor_type="mid360",
+            samples=24000,  # Reduced for better performance with 1024 envs
+        ),
+        mesh_prim_paths=["/World/ground",], #this is for global dynamic and static mesh
+        max_distance=10.0,
+        min_range=0.2,
+        return_pointcloud=False,  # Disable pointcloud for performance
+        pointcloud_in_world_frame=False,
+        enable_sensor_noise=True,  # Disable noise for pure performance test
+        random_distance_noise=0.0,
+        update_frequency=10.0,  # 25 Hz for better performance
+        debug_vis=False,  # Disable visualization for performance
     )
     
     sky_light = AssetBaseCfg(
@@ -498,6 +620,8 @@ class QuadrupedEnvCfg(ManagerBasedEnvCfg):
         self.sim.dt = 0.005  # simulation timestep -> 200 Hz physics
         # self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.device = args_cli.device
+        if hasattr(self.scene, 'lidar_sensor') and self.scene.lidar_sensor is not None:
+            self.scene.lidar_sensor.update_period = self.decimation * self.sim.dt  # 50 Hz
         
 class PhaseGenerator():
     def __init__(self,):
@@ -539,9 +663,10 @@ def construct_policy():
     actor_critic.load_state_dict(loaded_dict["model_state_dict"], strict = True)
     return actor_critic
 
-def main(topic_processor, topic_publish_min_time = 0.1):
+def main(topic_processor, topic_publish_min_time = 0.5):
     env_cfg = QuadrupedEnvCfg()
     env = ManagerBasedEnv(cfg=env_cfg)
+    lidar_setting_dict = {'type': '2d', 'min_angle': -math.pi, 'max_angle': math.pi, 'num_bins': 41, 'angle_step': 2 * math.pi / 40}
     
     policy = construct_policy()
     phase_generator = PhaseGenerator()
@@ -567,15 +692,45 @@ def main(topic_processor, topic_publish_min_time = 0.1):
                 action = policy.actor(policy_obs)[:, :12]
                 # step env
                 obs, _ = env.step(action)
-                
-            img_rgb = env.scene['robot_front_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
-            img_depth = env.scene['robot_front_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
-            rgb = img_rgb[0].cpu().numpy()
-            depth = img_depth[0, :, :, 0].cpu().numpy()
             
             if time.time() - last_publish_time > topic_publish_min_time:
-                topic_processor.publish_rgb_image(rgb, '/front_stereo_camera/left/image_raw')
-                topic_processor.publish_depth_image(depth, '/front_stereo_camera/left/depth_raw')
+                frontcam_rgb = env.scene['robot_front_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
+                frontcam_depth = env.scene['robot_front_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
+                frontcam_rgb = frontcam_rgb[0].cpu().numpy()
+                frontcam_depth = frontcam_depth[0, :, :, 0].cpu().numpy()
+                topic_processor.publish_rgb_image(frontcam_rgb, '/front_stereo_camera/left/image_raw')
+                topic_processor.publish_depth_image(frontcam_depth, '/front_stereo_camera/left/depth_raw')
+                
+                lidar_obs, min_distance = get_lidar_obs(sensor = env.scene['lidar_sensor'], robot = env.scene['robot'], perception_dit = lidar_setting_dict, min_target = torch.Tensor([0.25, 0]).cuda())
+                lidar_scan = lidar_obs.cpu().numpy().astype(np.float32)[0]
+                topic_processor.publish_lidar_scan(lidar_scan, '/lidar/scan_2d')
+
+                '''leftcam_rgb = env.scene['robot_left_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
+                leftcam_depth = env.scene['robot_left_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
+                leftcam_rgb = leftcam_rgb[0].cpu().numpy()
+                leftcam_depth = leftcam_depth[0, :, :, 0].cpu().numpy()
+                topic_processor.publish_rgb_image(leftcam_rgb, '/left_stereo_camera/left/image_raw')
+                topic_processor.publish_depth_image(leftcam_depth, '/left_stereo_camera/left/depth_raw')
+                
+                rightcam_rgb = env.scene['robot_right_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
+                rightcam_depth = env.scene['robot_right_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
+                rightcam_rgb = rightcam_rgb[0].cpu().numpy()
+                rightcam_depth = rightcam_depth[0, :, :, 0].cpu().numpy()
+                topic_processor.publish_rgb_image(rightcam_rgb, '/right_stereo_camera/left/image_raw')
+                topic_processor.publish_depth_image(rightcam_depth, '/right_stereo_camera/left/depth_raw')
+                
+                rearcam_rgb = env.scene['robot_rear_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
+                rearcam_depth = env.scene['robot_rear_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
+                rearcam_rgb = rearcam_rgb[0].cpu().numpy()
+                rearcam_depth = rearcam_depth[0, :, :, 0].cpu().numpy()
+                topic_processor.publish_rgb_image(rearcam_rgb, '/rear_stereo_camera/left/image_raw')
+                topic_processor.publish_depth_image(rearcam_depth, '/rear_stereo_camera/left/depth_raw')'''
+                
+                lin_vel = env.scene['robot'].data.root_lin_vel_b[0]
+                ang_vel = env.scene['robot'].data.root_ang_vel_b[0]
+                robot_vel = torch.cat([lin_vel, ang_vel], dim=0).cpu().numpy()
+                topic_processor.publish_robot_vel(robot_vel, '/robot/vel')
+                
                 topic_processor.publish_odom(env.scene.articulations['robot'].data, '/chassis/odom')
                 topic_processor.publish_tf(env.scene.articulations['robot'].data)
                 last_publish_time = time.time()
@@ -594,8 +749,16 @@ def main(topic_processor, topic_publish_min_time = 0.1):
 if __name__ == "__main__":
     publish_topic_list = [
         ('/chassis/odom', 'nav_msgs/msg/Odometry'),
+        ('/robot/vel', 'geometry_msgs/Twist'),
         ('/front_stereo_camera/left/image_raw', 'sensor_msgs/msg/Image'),
         ('/front_stereo_camera/left/depth_raw', 'sensor_msgs/msg/Image'),
+        ('/left_stereo_camera/left/image_raw', 'sensor_msgs/msg/Image'),
+        ('/left_stereo_camera/left/depth_raw', 'sensor_msgs/msg/Image'),
+        ('/right_stereo_camera/left/image_raw', 'sensor_msgs/msg/Image'),
+        ('/right_stereo_camera/left/depth_raw', 'sensor_msgs/msg/Image'),
+        ('/rear_stereo_camera/left/image_raw', 'sensor_msgs/msg/Image'),
+        ('/rear_stereo_camera/left/depth_raw', 'sensor_msgs/msg/Image'),
+        ('/lidar/scan_2d', 'std_msgs/Float32MultiArray'),
     ]
     subscribe_topic_list = [
         ('/cmd_vel', 'geometry_msgs/msg/Twist'),
