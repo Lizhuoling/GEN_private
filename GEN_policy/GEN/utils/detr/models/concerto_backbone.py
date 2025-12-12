@@ -24,6 +24,8 @@ class Concerto(nn.Module):
         self.use_level_num = 3
         if cfg['POLICY']['BACKBONE'] == 'concerto_s':
             self.num_features = 896
+        elif cfg['POLICY']['BACKBONE'] == 'concerto_t':
+            self.num_features = 448
         else:
             raise Exception(f"Unsupported backbone: {cfg['POLICY']['BACKBONE']}.")
             

@@ -140,7 +140,7 @@ def main(xy_waypoints, total_loops=1, args=None):
 
 if __name__ == '__main__':
     # warehouse
-    robot_init_pos = [-6.0, -1.0, 0.4]
+    '''robot_init_pos = [-6.0, -1.0, 0.4]
     robot_init_quat = [0.0, 0.0, 0.0, 1.0]  # wxyz
     world_waypoints = [
         (-6.0, 15.3, 0.4),
@@ -148,17 +148,17 @@ if __name__ == '__main__':
         (7.1, -8.5, 0.4),
         (-8.4, -8.5, 0.4),
         (-6.0, -1.0, 0.4),
-    ]
+    ]'''
 
     # garden waypoints
-    '''robot_init_pos = [60.1, -8.6, 4.0]
+    robot_init_pos = [60.1, -8.6, 4.0]
     robot_init_quat = [0.0, 0.0, 0.0, 1.0]  # wxyz
     world_waypoints = [
         (49.2, -4.9, 4.0),
         (56.5, 0.5, 4.0),
         (66.8, 0.5, 4.0),
         (60.1, -8.6, 4.0),
-    ]'''
+    ]
     
     odom_waypoints = world_to_odom(init_pos = robot_init_pos, init_quat_wxyz = robot_init_quat, world_points = world_waypoints)
     xy_waypoints = odom_waypoints[:, :2].tolist()

@@ -422,13 +422,13 @@ def ros2_commands(env: ManagerBasedEnv) -> torch.Tensor:
 class SceneCfg(InteractiveSceneCfg):
     """Example scene configuration."""
 
-    ground_cfg = AssetBaseCfg(
-            prim_path="/World/ground", 
-            spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
+    #ground = AssetBaseCfg(
+    #        prim_path="/World/ground", 
+    #        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/carter_warehouse.usd"))
     
-    #ground_cfg = AssetBaseCfg(
-    #    prim_path="/World/ground", 
-    #    spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
+    ground = AssetBaseCfg(
+        prim_path="/World/ground", 
+        spawn=sim_utils.UsdFileCfg(usd_path=f"/home/cvte/twilight/data/IsaacSim/CVTE2_scene/cvte2_mesh_3dgs.usd"))
 
     robot: ArticulationCfg = ALIENGO_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
@@ -658,7 +658,7 @@ class PhaseGenerator():
         
 def construct_policy():
     policy_path = "aliengo_asset/aliengo_policy.pt"
-    actor_critic = ActorCritic(num_actor_obs = 260, num_critic_obs = 260, num_actions = 12, actor_hidden_dims = [128, 128, 128], critic_hidden_dims = [128, 128, 128]).cuda()
+    actor_critic = ActorCritic(num_actor_obs = 260, num_critic_obs = 260, num_actions = 12, inperception_dim = None, perception_in_dim = None, perception_out_dim = None, actor_hidden_dims = [128, 128, 128], critic_hidden_dims = [128, 128, 128]).cuda()
     loaded_dict = torch.load(policy_path)
     actor_critic.load_state_dict(loaded_dict["model_state_dict"], strict = True)
     return actor_critic
@@ -700,10 +700,6 @@ def main(topic_processor, topic_publish_min_time = 0.5):
                 frontcam_depth = frontcam_depth[0, :, :, 0].cpu().numpy()
                 topic_processor.publish_rgb_image(frontcam_rgb, '/front_stereo_camera/left/image_raw')
                 topic_processor.publish_depth_image(frontcam_depth, '/front_stereo_camera/left/depth_raw')
-                
-                #lidar_obs, min_distance = get_lidar_obs(sensor = env.scene['lidar_sensor'], robot = env.scene['robot'], perception_dit = lidar_setting_dict, min_target = torch.Tensor([0.25, 0]).cuda())
-                #lidar_scan = lidar_obs.cpu().numpy().astype(np.float32)[0]
-                #topic_processor.publish_lidar_scan(lidar_scan, '/lidar/scan_2d')
 
                 '''leftcam_rgb = env.scene['robot_left_cam'].data.output["rgb"]   # Left shape: (num_envs, 480, 640, 3)
                 leftcam_depth = env.scene['robot_left_cam'].data.output["distance_to_image_plane"] # Left shape: (num_envs, 480, 640, 1)
@@ -725,6 +721,10 @@ def main(topic_processor, topic_publish_min_time = 0.5):
                 rearcam_depth = rearcam_depth[0, :, :, 0].cpu().numpy()
                 topic_processor.publish_rgb_image(rearcam_rgb, '/rear_stereo_camera/left/image_raw')
                 topic_processor.publish_depth_image(rearcam_depth, '/rear_stereo_camera/left/depth_raw')'''
+                
+                lidar_obs, min_distance = get_lidar_obs(sensor = env.scene['lidar_sensor'], robot = env.scene['robot'], perception_dit = lidar_setting_dict, min_target = torch.Tensor([0.25, 0]).cuda())
+                lidar_scan = lidar_obs.cpu().numpy().astype(np.float32)[0]
+                topic_processor.publish_lidar_scan(lidar_scan, '/lidar/scan_2d')
                 
                 lin_vel = env.scene['robot'].data.root_lin_vel_b[0]
                 ang_vel = env.scene['robot'].data.root_ang_vel_b[0]

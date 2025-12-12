@@ -220,9 +220,7 @@ def project_and_sample_3d(point_array, perception_dit):
 def get_lidar_obs(sensor, robot, perception_dit, min_target):
     
     robot_base_quat_w = robot.data.root_quat_w
-    st_time = time.time()
     hit_vec = sensor.data.ray_hits_w - sensor.data.pos_w.unsqueeze(1)
-    print(f"lidar time: {time.time() - st_time}")
     hit_vec[torch.isinf(hit_vec)] = 0.0
     hit_vec[torch.isnan(hit_vec)] = 0.0
     
